@@ -9,6 +9,7 @@
 *.cfg
 *.sqlite3
 **/counts/
+log/
 __pycache__/
 *.npy
 *.npz
