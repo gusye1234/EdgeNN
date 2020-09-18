@@ -8,8 +8,6 @@
 .DS_Store
 *.cfg
 *.sqlite3
-checkpoints/
-runs/
 **/counts/
 __pycache__/
 *.npy

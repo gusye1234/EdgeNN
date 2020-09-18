@@ -5,6 +5,7 @@ Including
     log
     sample
 """
+from os.path import join
 import world
 import torch
 import numpy as np
@@ -18,7 +19,7 @@ from tabulate import tabulate
 
 def accuracy(pred, groundtruth, mask):
     with torch.no_grad():
-        return torch.eq(pred[mask], groundtruth[mask]).float().mean().item()
+        return torch.eq(pred[mask], groundtruth[mask]).float().mean().item()*100
 
 #################################
 # analyse and visualize data
@@ -62,8 +63,19 @@ def revelant_sets(data_dict):
     counts = {name : round(value/total_edges, 2) for name, value in counts.items()}
     return counts
 
-def dict2table(table : dict):
-    return tabulate([[key, value] for key, value in table.items()])
+def dict2table(table : dict, headers='row'):
+    if headers == 'row':
+        tab = []
+        for key in sorted(list(table)):
+            tab.append([key, table[key]])
+        return tabulate(tab)
+    elif headers == 'firstrow':
+        head = []
+        data = []
+        for key in sorted(list(table)):
+            head.append(key)
+            data.append(table[key])
+        return tabulate([head, data], headers='firstrow')
 
 
 def state_edges_distribution(data_dict):
@@ -175,17 +187,27 @@ def TO(*tensors, **kwargs):
         results.append(tensor.to(device))
     return results
 
+def uniqueFileFlag():
+    from world import CONFIG
+    return f"{CONFIG['comment']}-{CONFIG['dataset']}-{CONFIG['dim']}"
+
+def Path3(father, son, grandson):
+    '''father/son/grandson'''
+    return join(join(father, son), grandson)
 
 class timer:
     """
     Time context manager for code block
+        with timer():
+            do something
+        timer.get()
     """
     from time import time
     TAPE = [-1]  # global time record
 
     @staticmethod
     def get():
-        return timer.TAPE[-1]
+        return timer.TAPE.pop()
 
     def __init__(self, tape=None):
         self.tape = tape or timer.TAPE
@@ -196,6 +218,40 @@ class timer:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.tape.append(timer.time() - self.start)
+
+
+class EarlyStop:
+    def __init__(self, patience, model, filename):
+        self.patience = patience
+        self.model = model
+        self.filename = filename
+        self.suffer = 0
+        self.best = 0
+        self.best_result = None
+        self.best_epoch = 0
+        self.mean = 0
+        self.sofar = 1
+
+    def step(self, epoch, performance, where):
+        if performance[where] < self.mean:
+            self.suffer += 1
+            if self.suffer >= self.patience:
+                return True
+            self.sofar += 1
+            self.mean = self.mean * \
+                        (self.sofar -1) / self.sofar + \
+                        performance[where] / self.sofar
+            print(f"Suffer {self.suffer:.4f} : {self.mean:.4f}", end='')
+            return False
+        else:
+            self.suffer = 0
+            self.mean = performance[where]
+            self.sofar = 1
+            self.best = performance[where]
+            self.best_result = performance
+            self.best_epoch = epoch
+            torch.save(self.model.state_dict(), self.filename)
+            return False
 
 
 if __name__ == "__main__":

@@ -4,7 +4,8 @@ import torch
 from os.path import join
 from typing import NewType
 import scipy.sparse as spp
-from pprint import pprint as print
+import warnings
+warnings.filterwarnings("ignore")
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 
@@ -13,10 +14,17 @@ def parse_args():
     parser.add_argument('--dataset', type=str, default='cora')
     # TODO
     parser.add_argument('--dim', type=int, default=50)
-    parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--decay', type=float, default=1e-4)
-    parser.add_argument('--epoch', type=int, default=1000)
-
+    parser.add_argument('--lr', type=float, default=0.05)
+    parser.add_argument('--decay', type=float, default=5e-6)
+    parser.add_argument('--epoch', type=int, default=3000)
+    parser.add_argument('--decay_factor', type=float, default=0.8)
+    parser.add_argument('--decay_patience', type=int, default=50)
+    parser.add_argument('--stop_patience', type=int, default=100)
+    parser.add_argument('--tensorboard', type=bool, default=False)
+    parser.add_argument('--comment', type=str, default='Edge')
+    parser.add_argument('--model', type=str, default='gcn')
+    parser.add_argument('--gcn_hidden', type=int, default=16)
+    parser.add_argument('--dropout_rate', type=float, default=0.5)
     args = parser.parse_args()
     return args
 
@@ -24,11 +32,14 @@ def parse_args():
 ROOT = "/Users/gus/Desktop/edges"
 CODE = join(ROOT, "code")
 DATA = join(ROOT, "data")
+LOG = join(ROOT, "log")
+
 GPU = torch.cuda.is_available()
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 CONFIG = {**vars(parse_args())}
 CONFIG['the number of embed dims'] = CONFIG['dim']
-
+CONFIG['comment'] = CONFIG['comment'] + '-' + CONFIG['model']
 
 
 NODE = NewType("NODE", int)

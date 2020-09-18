@@ -3,7 +3,6 @@ load data and convert format.
 General way to store a graph is scipy.sparse
 """
 import world
-from world import print
 from world import GRAPH
 import torch
 import sys
@@ -34,6 +33,8 @@ _all_datasets = {
     "cora"     : join(world.DATA, "INDS"),
 }
 _splits_files = join(world.DATA, "SPLITS")
+_unconnected_files = join(world.DATA, 'UNCONNECTED')
+
 
 def update(name, path):
     global _all_datasets
@@ -58,7 +59,9 @@ def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
         _, F, L = load_feature_label(FL_file, convert=(932 if (name == 'film') else False))
     if True:
         F = preprocess_features(F)
-    # TODO, add process for cora and citeseer
+
+    if name in ['cora', 'citeseer']:
+        connected_subset = process_unconnected(name, L)
 
     if splitFile:
         try:
@@ -74,15 +77,20 @@ def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
             assert (trainP + valP + testP) == 1
         except AssertionError:
             raise AssertionError(f"Expect separation {trainP}+{valP}+{testP}=1")
-        (train_mask,
-         valid_mask,
-         test__mask) = generate_mask(F.shape[0], trainP, valP, testP)
+        if name in ['cora', 'citeseer']:
+            (train_mask,
+             valid_mask,
+             test__mask) = generate_mask(F.shape[0], trainP, valP, testP, subset=connected_subset)
+        else:
+            (train_mask,
+             valid_mask,
+             test__mask) = generate_mask(F.shape[0], trainP, valP, testP)
     return Graph({
-        "name"      : name,
-        "labels"    : L,
-        "features"  : F,
+        "name": name,
+        "labels": torch.LongTensor(L),
+        "features": torch.Tensor(F),
         "adj matrix": A,
-        "test mask" : test__mask,
+        "test mask": test__mask,
         "train mask": train_mask,
         "valid mask": valid_mask,
     })
@@ -92,6 +100,7 @@ def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
 # data helper
 #################################
 class Graph:
+    '''wrap data with set operations'''
     def __init__(self, data_dict : dict):
         self.__dict = data_dict
         self.__pre_label = None
@@ -100,6 +109,9 @@ class Graph:
         self.__class = np.unique(data_dict['labels'])
         self.__index_A = self.__dict['adj matrix'].tocsr()
         self.__edges_A =  self.__dict['adj matrix'].todok()
+        self.adj = sparse_mx_to_torch_sparse_tensor(self.__dict['adj matrix'])
+        self.sum = self.__index_A.sum(1)
+        self.device = 'cpu'
 
     def num_nodes(self):
         return len(self.__dict['labels'])
@@ -107,17 +119,25 @@ class Graph:
     def num_classes(self):
         return len(np.unique(self.__dict['labels']))
 
+    def to(self, device):
+        self.__dict['labels'].to(device)
+        self.__dict['features'].to(device)
+        self.adj.to(device)
+        self.device = device
+        return self
+
     def __repr__(self):
+        splits = (
+            sum(self.__dict['train mask']),
+            sum(self.__dict['valid mask']),
+            sum(self.__dict['test mask']),
+        )
         flag = f"""
-        {self.__dict['name']}:
+        {self.__dict['name']}({str(self.device)}):
             Adj matrix     -> {self.__dict['adj matrix'].shape}
             Feature matrix -> {self.__dict['features'].shape}
             Label vector   -> {self.__dict['labels'].shape}
-            Spilt          -> {(
-                sum(self.__dict['train mask']),
-                sum(self.__dict['valid mask']),
-                sum(self.__dict['test mask']),
-            )}
+            Spilt          -> {splits} = {sum(splits)}
         """
         return flag
 
@@ -129,8 +149,19 @@ class Graph:
         self.__pre_label = labels
         self.__upd_label = True
 
-    def neighboors(self, node):
+    def neighbours(self, node):
         return self.__index_A[node].nonzero()[1]
+
+    def neighbours_sum(self):
+        return self.sum
+
+    def nodes(self):
+        for i in range(self.__index_A.shape[0]):
+            yield i
+
+    def edges(self):
+        for pair, weight in self.__edges_A.items():
+            yield (pair, weight)
 
     def _Revelant_sets(self):
         """
@@ -170,7 +201,7 @@ class Graph:
         label_u = self.__pre_label[node]
         if label_u != label:
             return []
-        neigh = self.neighboors(node)
+        neigh = self.neighbours(node)
         index = (self.__pre_label[neigh] == label)
         for vk in neigh[index]:
             yield (node, vk)
@@ -267,7 +298,21 @@ def preprocess_adj(adj):
     adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
     return adj_normalized
 
-def generate_mask(length, trainP, valP, testP):
+def process_unconnected(name, labels):
+    disconnected_node_file_path = join(_unconnected_files, f'{name}_unconnected_nodes.txt')
+    with open(disconnected_node_file_path) as disconnected_node_file:
+        disconnected_node_file.readline()
+        disconnected_nodes = []
+        for line in disconnected_node_file:
+            line = line.rstrip()
+            disconnected_nodes.append(int(line))
+
+    disconnected_nodes = np.array(disconnected_nodes)
+    connected_nodes = np.setdiff1d(np.arange(labels.shape[0]), disconnected_nodes)
+    return connected_nodes
+
+
+def generate_mask(length, trainP, valP, testP, subset=None):
     """
     given proportion of train set, validation set, test set
     return:
@@ -275,20 +320,39 @@ def generate_mask(length, trainP, valP, testP):
         val mask   : np.ndarray    
         test mask  : np.ndarray
     """
-    train_mask = np.zeros(length, dtype=np.uint8)
-    valid_mask = np.zeros(length, dtype=np.uint8)
-    test__mask = np.zeros(length, dtype=np.uint8)
+    train_mask = np.zeros(length, dtype=np.int16)
+    valid_mask = np.zeros(length, dtype=np.int16)
+    test__mask = np.zeros(length, dtype=np.int16)
+    if subset is not None:
+        length_= length
+        length = len(subset)
+
+    fake_mask = np.zeros(length, dtype=np.int16)
 
     TV      = (trainP + valP)
     split_1 = ShuffleSplit(n_splits=1, train_size=TV)
     split_2 = ShuffleSplit(n_splits=1, train_size=float(trainP/TV))
 
-    TV_index, t_index = split_1.split(train_mask).__next__()
+    TV_index, t_index = split_1.split(fake_mask).__next__()
     T_index , V_index    = split_2.split(TV_index).__next__()
     T_index , V_index    = TV_index[T_index], TV_index[V_index]
 
-    train_mask[T_index] = 1
-    valid_mask[V_index] = 1
-    test__mask[t_index] = 1
-
+    if subset is not None:
+        train_mask[subset[T_index]] = 1
+        valid_mask[subset[V_index]] = 1
+        test__mask[subset[t_index]] = 1
+    else:
+        train_mask[T_index] = 1
+        valid_mask[V_index] = 1
+        test__mask[t_index] = 1
     return train_mask, valid_mask, test__mask
+
+
+def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.FloatTensor(indices, values, shape)
