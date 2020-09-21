@@ -121,9 +121,9 @@ class Graph:
         return len(np.unique(self.__dict['labels']))
 
     def to(self, device):
-        self.__dict['labels'].to(device)
-        self.__dict['features'].to(device)
-        self.adj.to(device)
+        self.__dict['labels'] = self.__dict['labels'].to(device)
+        self.__dict['features'] = self.__dict['features'].to(device)
+        self.adj = self.adj.to(device)
         self.device = device
         return self
 

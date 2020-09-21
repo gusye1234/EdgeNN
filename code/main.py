@@ -52,7 +52,6 @@ earlystop = utils.EarlyStop(CONFIG['stop_patience'],
                             MODEL,
                             Path3(world.LOG, 'checkpoints', f"{unique_name}.pth.tar"))
 
-
 (MODEL, dataset) = utils.TO(MODEL, dataset, device=world.DEVICE)
 print(dataset)
 print(utils.dict2table(CONFIG))
