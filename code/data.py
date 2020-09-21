@@ -300,11 +300,11 @@ def preprocess_adj(adj):
     return adj_normalized
 
 def normalize_adj(adj):
-    rowsum = np.array(mx.sum(1))
+    rowsum = np.array(adj.sum(1))
     r_inv = np.power(rowsum, -1).flatten()
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = spp.diags(r_inv)
-    mx = r_mat_inv.dot(mx)
+    mx = r_mat_inv.dot(adj)
     return mx
 
 
