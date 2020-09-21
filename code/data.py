@@ -109,7 +109,8 @@ class Graph:
         self.__class = np.unique(data_dict['labels'])
         self.__index_A = self.__dict['adj matrix'].tocsr()
         self.__edges_A =  self.__dict['adj matrix'].todok()
-        self.adj = sparse_mx_to_torch_sparse_tensor(self.__dict['adj matrix'])
+        self.adj = sparse_mx_to_torch_sparse_tensor(
+            preprocess_adj(self.__dict['adj matrix']))
         self.sum = self.__index_A.sum(1)
         self.device = 'cpu'
 
@@ -297,6 +298,15 @@ def preprocess_adj(adj):
     """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
     adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
     return adj_normalized
+
+def normalize_adj(adj):
+    rowsum = np.array(mx.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = spp.diags(r_inv)
+    mx = r_mat_inv.dot(mx)
+    return mx
+
 
 def process_unconnected(name, labels):
     disconnected_node_file_path = join(_unconnected_files, f'{name}_unconnected_nodes.txt')

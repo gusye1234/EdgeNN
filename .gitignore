@@ -11,7 +11,7 @@
 **/counts/
 log/
 __pycache__/
-*.npy
-*.npz
+# *.npy
+# *.npz
 count.txt
 test.sh
