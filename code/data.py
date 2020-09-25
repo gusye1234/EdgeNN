@@ -43,7 +43,7 @@ def all_datasets():
     return list(_all_datasets)
 
 # A: adj matrix, F: features, L: labels, G: nx or dgl graph
-def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
+def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
     try:
         path = _all_datasets[name]
     except:
@@ -89,7 +89,7 @@ def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
         "name": name,
         "labels": torch.LongTensor(L),
         "features": torch.Tensor(F),
-        "adj matrix": A,
+        "adj matrix": A + spp.eye(A.shape[0]),
         "test mask":torch.ByteTensor(test__mask),
         "train mask": torch.ByteTensor(train_mask),
         "valid mask": torch.ByteTensor(valid_mask),
@@ -135,9 +135,9 @@ class Graph:
 
     def __repr__(self):
         splits = (
-            sum(self.__dict['train mask']),
-            sum(self.__dict['valid mask']),
-            sum(self.__dict['test mask']),
+            self.__dict['train mask'].sum().item(),
+            self.__dict['valid mask'].sum().item(),
+            self.__dict['test mask'].sum().item(),
         )
         flag = f"""
         {self.__dict['name']}({str(self.device)}):
@@ -321,7 +321,7 @@ def preprocess_features(features):
 
 def preprocess_adj(adj):
     """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
-    adj_normalized = normalize_adj(adj + spp.eye(adj.shape[0]))
+    adj_normalized = normalize_adj(adj)
     return adj_normalized
 
 def normalize_adj(adj):
@@ -380,6 +380,7 @@ def generate_mask(length, trainP, valP, testP, subset=None):
         train_mask[T_index] = 1
         valid_mask[V_index] = 1
         test__mask[t_index] = 1
+    print("SEE", train_mask.sum(), valid_mask.sum(), test__mask.sum())
     return train_mask, valid_mask, test__mask
 
 

@@ -283,7 +283,8 @@ class EarlyStop:
             self.best = performance[where]
             self.best_result = performance
             self.best_epoch = epoch
-            torch.save(self.model.state_dict(), self.filename)
+            self.best_model = self.model.state_dict()
+            # torch.save(self.model.state_dict(), self.filename)
             return False
 
 

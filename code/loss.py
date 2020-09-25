@@ -54,7 +54,7 @@ class EdgeLoss(BasicLoss):
             semi_loss *= self.semi_lambda
         else:
             semi_loss = 0
-        # sorry about the coming snippet, but vectorization is much faster
+        # sorry about the coming coda, but vectorization is much faster
         poss_edge = probability['poss_edge']
         edge_loss = 0.
         label_mask = mask[edges[:, 0]] | mask[edges[:, 1]]
@@ -75,12 +75,6 @@ class EdgeLoss(BasicLoss):
         ))
         range_index_left = torch.arange(left_single.sum())
         range_index_right = torch.arange(right_single.sum())
-        # print(
-        #     poss_edge[single_label][right_single][:, -1].shape,
-        #     poss_edge[single_label][right_single][
-        #         range_index_right,
-        #         groundTruth[edges[single_label][right_single][:, 1]]].shape)
-        
         edge_loss += -(torch.sum(torch.log(
             poss_edge[single_label][left_single][:, -1] + \
                 poss_edge[single_label][left_single][range_index_left, groundTruth[edges[single_label][left_single][:,0]]]

@@ -147,3 +147,45 @@ class GCNP(BasicModel):
         E = self.operator(src_embed, dst_embed)
         # print(E[:5])
         return self.trans(E)
+
+
+class GCNP_aligned(Module):
+    def __init__(self, CONFIG, G):
+        super(GCNP_aligned, self).__init__()
+        self.G = G
+        self.num_nodes = CONFIG['the number of nodes']
+        self.num_dims = CONFIG['the number of embed dims']
+        self.num_class = CONFIG['the number of classes']
+        self.num_features = CONFIG['the dimension of features']
+        hidden_dim = CONFIG['gcn_hidden']
+        dropout = CONFIG['dropout_rate']
+        self.gcn = GCN(self.num_features, hidden_dim, self.num_dims, dropout)
+        self.trans = nn.Sequential(nn.Linear(self.num_dims * 2, 16), nn.ReLU(),
+                                   nn.Linear(16, self.num_class ),
+                                   nn.ReLU(), nn.Softmax(dim=1))
+
+    def operator(self, src, dst):
+        E1 = (src + dst) / 2
+        E2 = (src - dst).pow(2)
+        return torch.cat([E1, E2], dim=1)
+
+    def predict_edges(self, src, dst):
+        embedding = self.gcn(self.G['features'], self.G.adj)
+        src_embed = embedding[src]
+        dst_embed = embedding[dst]
+        E = self.operator(src_embed, dst_embed)
+        # print(E[:5])
+        return self.trans(E)
+
+    def forward(self):
+        'predict all the label'
+        edges, weights = self.G.edges_tensor()
+        poss_edge = self.predict_edges(edges[:, 0], edges[:, 1])
+        poss_node = torch.zeros(self.num_nodes,
+                                self.num_class).to(world.DEVICE)
+
+        value = poss_edge * weights.unsqueeze(1)
+        index = edges[:, 0].repeat(self.num_class, 1).t()
+        poss_node.scatter_add_(0, index, value)
+        poss_node /= self.G.neighbours_sum()
+        return {'poss_node': poss_node, 'poss_edge': poss_edge}

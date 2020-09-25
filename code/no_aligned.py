@@ -10,13 +10,12 @@ from loss import CrossEntropy, EdgeLoss
 from tabulate import tabulate
 from tensorboardX import SummaryWriter
 
-
 set_seed(2020)
 #################################
 # data
 #################################
-dataset = loadAFL(CONFIG['dataset'],)
-                #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
+dataset = loadAFL(CONFIG['dataset'], )
+#   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
@@ -30,32 +29,29 @@ if CONFIG['model'] == 'embedding':
     from model import EmbeddingP
     MODEL = EmbeddingP(CONFIG, dataset)
 elif CONFIG['model'] == 'gcn':
-    from model import GCNP
-    MODEL = GCNP(CONFIG, dataset)
+    from model import GCNP_aligned
+    MODEL = GCNP_aligned(CONFIG, dataset)
 
 # print([name for name, para in list(MODEL.named_parameters())])
-
 
 optim = torch.optim.Adam(MODEL.parameters(),
                          lr=CONFIG['lr'],
                          weight_decay=CONFIG['decay'])
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=optim,
-                                                       factor=CONFIG['decay_factor'],
-                                                       patience=CONFIG['decay_patience'])
-# LOSS = CrossEntropy()
-LOSS = EdgeLoss(graph=dataset,
-                **CONFIG)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer=optim,
+    factor=CONFIG['decay_factor'],
+    patience=CONFIG['decay_patience'])
+LOSS = CrossEntropy()
+# LOSS = EdgeLoss(graph=dataset, **CONFIG)
 
 #################################
 # logger
 #################################
 if CONFIG['tensorboard']:
-    logger = SummaryWriter(
-        logdir=  Path3(world.LOG, 'runs', unique_name)
-    )
-earlystop = utils.EarlyStop(CONFIG['stop_patience'],
-                            MODEL,
-                            Path3(world.LOG, 'checkpoints', f"{unique_name}.pth.tar"))
+    logger = SummaryWriter(logdir=Path3(world.LOG, 'runs', unique_name))
+earlystop = utils.EarlyStop(
+    CONFIG['stop_patience'], MODEL,
+    Path3(world.LOG, 'checkpoints', f"{unique_name}.pth.tar"))
 
 (MODEL, dataset) = utils.TO(MODEL, dataset, device=world.DEVICE)
 print(dataset)
@@ -64,7 +60,7 @@ print(utils.dict2table(CONFIG))
 #################################
 # main train loop
 #################################
-for epoch in range(1, CONFIG['epoch']+1):
+for epoch in range(1, CONFIG['epoch'] + 1):
     report = {}
     with timer(name='total'):
         with timer(name='F'):
@@ -93,21 +89,23 @@ for epoch in range(1, CONFIG['epoch']+1):
 
             # remove unaligned dim
             with timer(name='M'):
-                prediction = probability['poss_node'][:, :-1].argmax(dim=1)
-                prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
+                prediction = probability['poss_node'].argmax(dim=1)
+                prediction_valid = probability_valid['poss_node'].argmax(dim=1)
                 # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
-                                                    dataset['labels'],
-                                                    dataset['train mask'])
+                                                     dataset['labels'],
+                                                     dataset['train mask'])
                 report['valid acc'] = utils.accuracy(prediction_valid,
-                                                    dataset['labels'],
-                                                    dataset['valid mask'])
+                                                     dataset['labels'],
+                                                     dataset['valid mask'])
 
-    print(f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
-          f" T loss {report['train loss']:.3f}#"
-          f" T acc {report['train acc']:.2f}#"
-          f" V loss {report['valid loss']:.3f}#"
-          f" V acc {report['valid acc']:.2f}", end='')
+    print(
+        f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
+        f" T loss {report['train loss']:.3f}#"
+        f" T acc {report['train acc']:.2f}#"
+        f" V loss {report['valid loss']:.3f}#"
+        f" V acc {report['valid acc']:.2f}",
+        end='')
     timer.zero()
     if CONFIG['tensorboard']:
         logger.add_scalar('train loss', report['train loss'], epoch)
@@ -132,12 +130,10 @@ MODEL.load_state_dict(earlystop.best_model)
 with torch.no_grad():
     MODEL.eval()
     probability = MODEL()
-    prediction = probability['poss_node'][:, :-1].argmax(dim=1)
-    final_report['test acc'] = utils.accuracy(prediction,
-                                              dataset['labels'],
+    prediction = probability['poss_node'].argmax(dim=1)
+    final_report['test acc'] = utils.accuracy(prediction, dataset['labels'],
                                               dataset['test mask'])
-    final_report['test loss'] = LOSS(probability,
-                                     dataset['labels'],
+    final_report['test loss'] = LOSS(probability, dataset['labels'],
                                      dataset['test mask']).item()
 torch.save(earlystop.best_model, earlystop.filename)
 try:
