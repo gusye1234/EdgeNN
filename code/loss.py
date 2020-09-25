@@ -19,4 +19,7 @@ class CrossEntropy(BasicLoss):
             probability already sum=1
         '''
         log_likelihood = torch.log(probability)
-        return F.nll_loss(log_likelihood, groundTruth.long())
+        loss = F.nll_loss(log_likelihood, groundTruth.long())
+        if torch.isnan(loss):
+            pass
+        return loss

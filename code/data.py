@@ -284,11 +284,6 @@ def parse_index_file(filename):
     return index
 
 def preprocess_features(features):
-    # rowsum = np.array(features.sum(1))
-    # r_inv = np.power(rowsum, -1).flatten()
-    # r_inv[np.isinf(r_inv)] = 0.
-    # r_mat_inv = sp.diags(r_inv)
-    # features = r_mat_inv.dot(features)
     rowsum = features.sum(1)
     rowsum[rowsum < 1e-9] = 1.
     normalized = (features.T/rowsum).T
@@ -305,7 +300,6 @@ def normalize_adj(adj):
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = spp.diags(r_inv)
     mx = r_mat_inv.dot(adj)
-    print(type(mx), type(r_mat_inv), type(adj))
     return mx
 
 
@@ -361,7 +355,6 @@ def generate_mask(length, trainP, valP, testP, subset=None):
 
 def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     """Convert a scipy sparse matrix to a torch sparse tensor."""
-    print(type(sparse_mx))
     sparse_mx = sparse_mx.tocoo().astype(np.float32)
     indices = torch.from_numpy(
         np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))

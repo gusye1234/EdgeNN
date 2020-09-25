@@ -2,6 +2,7 @@ import world
 import utils
 import torch
 import torch.nn.functional as F
+import numpy as np
 from world import join, CONFIG
 from utils import timer, Path3, set_seed
 from data import loadAFL
@@ -31,6 +32,8 @@ if CONFIG['model'] == 'embedding':
 elif CONFIG['model'] == 'gcn':
     from model import GCNP
     MODEL = GCNP(CONFIG, dataset)
+
+print([name for name, para in list(MODEL.named_parameters())])
 
 
 optim = torch.optim.Adam(MODEL.parameters(),
@@ -73,8 +76,8 @@ for epoch in range(1, CONFIG['epoch']+1):
 
         with torch.no_grad():
             report['train loss'] = loss.item()
-            report['valid loss'] = LOSS(probability[dataset['train mask']],
-                                        dataset['labels'][dataset['train mask']]).item()
+            report['valid loss'] = LOSS(probability[dataset['valid mask']],
+                                        dataset['labels'][dataset['valid mask']]).item()
             MODEL.eval()
             # remove unaligned dim
             prediction = probability[:, :-1].argmax(dim=1)
@@ -92,6 +95,9 @@ for epoch in range(1, CONFIG['epoch']+1):
           f" T acc {report['train acc']:.2f}|"
           f" V loss {report['valid loss']:.4f}|"
           f" V acc {report['valid acc']:.2f}", end='')
+    if np.isnan(report['train loss']) or np.isnan(report['valid loss']):
+        import ipdb
+        ipdb.set_trace()
     scheduler.step(report['valid loss'])
     if earlystop.step(epoch, report, 'valid acc'):
         break

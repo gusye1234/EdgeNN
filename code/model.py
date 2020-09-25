@@ -124,14 +124,20 @@ class GCNP(BasicModel):
         hidden_dim = CONFIG['gcn_hidden']
         dropout = CONFIG['dropout_rate']
         self.gcn = GCN(self.num_features, hidden_dim, self.num_dims, dropout)
-        self.trans = nn.Sequential(nn.Linear(self.num_dims, 32),
+        self.trans = nn.Sequential(nn.Linear(self.num_dims*2, 32),
                                    nn.ReLU(),
                                    nn.Linear(32, self.num_class + 1),
                                    nn.ReLU(),
                                    nn.Softmax(dim=1))
 
+    def operator(self, src, dst):
+        E1 = (src + dst)/2
+        E2 = (src - dst).pow(2)
+        return torch.cat([E1, E2], dim=1)
+
     def predict_edges(self, src, dst):
         embedding = self.gcn(self.G['features'], self.G.adj)
         src_embed = embedding[src]
         dst_embed = embedding[dst]
-        return self.trans(src_embed + dst_embed)
+        E = self.operator(src_embed, dst_embed)
+        return self.trans(E)
