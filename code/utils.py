@@ -207,7 +207,10 @@ class timer:
 
     @staticmethod
     def get():
-        return timer.TAPE.pop()
+        if len(timer.TAPE) > 1:
+            return timer.TAPE.pop()
+        else:
+            return -1
 
     def __init__(self, tape=None):
         self.tape = tape or timer.TAPE
@@ -241,7 +244,7 @@ class EarlyStop:
             self.mean = self.mean * \
                         (self.sofar -1) / self.sofar + \
                         performance[where] / self.sofar
-            print(f"Suffer {self.suffer:.4f} : {self.mean:.4f}", end='')
+            print(f" * Suffer {self.suffer:.4f} : {self.mean:.4f}", end='')
             return False
         else:
             self.suffer = 0

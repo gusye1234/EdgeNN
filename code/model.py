@@ -10,7 +10,6 @@ from torch.nn import Module
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-
 class BasicModel(Module):
     def __init__(self, *args, **kwargs):
         super(BasicModel, self).__init__()
@@ -27,7 +26,7 @@ class BasicModel(Module):
         for i, (edge, weight) in enumerate(self.G.edges()):
             poss_node[edge[0]] += poss_edge[i]*weight
         poss_node /= torch.FloatTensor(self.G.neighbours_sum()).to(world.DEVICE)
-        return poss_node
+        return {'poss_node':poss_node, 'poss_edge': poss_edge}
 
 class EmbeddingP(BasicModel):
     def __init__(self, CONFIG, G : Graph):
@@ -124,9 +123,9 @@ class GCNP(BasicModel):
         hidden_dim = CONFIG['gcn_hidden']
         dropout = CONFIG['dropout_rate']
         self.gcn = GCN(self.num_features, hidden_dim, self.num_dims, dropout)
-        self.trans = nn.Sequential(nn.Linear(self.num_dims*2, 32),
+        self.trans = nn.Sequential(nn.Linear(self.num_dims*2, 16),
                                    nn.ReLU(),
-                                   nn.Linear(32, self.num_class + 1),
+                                   nn.Linear(16, self.num_class + 1),
                                    nn.ReLU(),
                                    nn.Softmax(dim=1))
 
@@ -140,4 +139,5 @@ class GCNP(BasicModel):
         src_embed = embedding[src]
         dst_embed = embedding[dst]
         E = self.operator(src_embed, dst_embed)
+        # print(E[:5])
         return self.trans(E)

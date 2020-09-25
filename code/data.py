@@ -139,16 +139,32 @@ class Graph:
             Feature matrix -> {self.__dict['features'].shape}
             Label vector   -> {self.__dict['labels'].shape}
             Spilt          -> {splits} = {sum(splits)}
+            EDGE:
+                Train      -> {self.count_edges(self.__dict['train mask'])}
+                Valid      -> {self.count_edges(self.__dict['valid mask'])}
+                Test       -> {self.count_edges(self.__dict['test mask'])}
         """
         return flag
 
     def __getitem__(self, key):
         return self.__dict[key]
 
-    def update_predict(self, labels):
-        """using newly predicted labels"""
-        self.__pre_label = labels
-        self.__upd_label = True
+    def count_edges(self, mask):
+        groundTruth = self.__dict['labels']
+        edge_count = [0,0,0,0]
+        for edge, _ in self.edges():
+            if mask[edge[0]] or mask[edge[1]]:
+                if mask[edge[0]] and mask[edge[1]]:
+                    if groundTruth[edge[0]] == groundTruth[edge[1]]:
+                        edge_count[0] += 1
+                    else:
+                        edge_count[1] += 1
+                else:
+                    labeled = edge[0] if mask[edge[0]] else edge[1]
+                    edge_count[2] += 1
+            else:
+                edge_count[3] += 1
+        return edge_count
 
     def neighbours(self, node):
         return self.__index_A[node].nonzero()[1]
@@ -164,48 +180,53 @@ class Graph:
         for pair, weight in self.__edges_A.items():
             yield (pair, weight)
 
-    def _Revelant_sets(self):
-        """
-        Calculate all the revelant sets, if there are new comming labels
-        """
-        if not self.__upd_label:
-            if self.__revelant_sets is None:
-                raise ValueError("labels haven't been updated")
-            else:
-                return
-        del self.__revelant_sets
-        self.__revelant_sets = {'unaligned' : []}
-        self.__upd_label = False
-        for pair, _ in self.__edges_A.items():
-            src = pair[0]
-            dst = pair[1]
-            if self.__pre_label[src] == self.__pre_label[dst]:
-                label = self.__pre_label[src]
-                self.__revelant_sets[label] = self.__revelant_sets.get(label, [])
-                self.__revelant_sets[label].append(pair)
-            else:
-                self.__revelant_sets['unaligned'].append(pair)
+    # def update_predict(self, labels):
+    #     """using newly predicted labels"""
+    #     self.__pre_label = labels
+    #     self.__upd_label = True
 
-    def C_(self, label):
-        """
-        retrieve all the edges in C_{label}
-        """
-        self._Revelant_sets()
-        assert label == 'unaligned' or label in self.__class
-        return self.__revelant_sets[label]
+    # def _Revelant_sets(self):
+    #     """
+    #     Calculate all the revelant sets, if there are new comming labels
+    #     """
+    #     if not self.__upd_label:
+    #         if self.__revelant_sets is None:
+    #             raise ValueError("labels haven't been updated")
+    #         else:
+    #             return
+    #     del self.__revelant_sets
+    #     self.__revelant_sets = {'unaligned' : []}
+    #     self.__upd_label = False
+    #     for pair, _ in self.__edges_A.items():
+    #         src = pair[0]
+    #         dst = pair[1]
+    #         if self.__pre_label[src] == self.__pre_label[dst]:
+    #             label = self.__pre_label[src]
+    #             self.__revelant_sets[label] = self.__revelant_sets.get(label, [])
+    #             self.__revelant_sets[label].append(pair)
+    #         else:
+    #             self.__revelant_sets['unaligned'].append(pair)
 
-    def intersection(self, node, label):
-        """
-        Return edges, Connect to node and in the C_{label}
-        """
-        assert self.__pre_label is not None
-        label_u = self.__pre_label[node]
-        if label_u != label:
-            return []
-        neigh = self.neighbours(node)
-        index = (self.__pre_label[neigh] == label)
-        for vk in neigh[index]:
-            yield (node, vk)
+    # def C_(self, label):
+    #     """
+    #     retrieve all the edges in C_{label}
+    #     """
+    #     self._Revelant_sets()
+    #     assert label == 'unaligned' or label in self.__class
+    #     return self.__revelant_sets[label]
+
+    # def intersection(self, node, label):
+    #     """
+    #     Return edges, Connect to node and in the C_{label}
+    #     """
+    #     assert self.__pre_label is not None
+    #     label_u = self.__pre_label[node]
+    #     if label_u != label:
+    #         return []
+    #     neigh = self.neighbours(node)
+    #     index = (self.__pre_label[neigh] == label)
+    #     for vk in neigh[index]:
+    #         yield (node, vk)
 
 
 #################################
@@ -339,8 +360,8 @@ def generate_mask(length, trainP, valP, testP, subset=None):
     split_2 = ShuffleSplit(n_splits=1, train_size=float(trainP/TV))
 
     TV_index, t_index = split_1.split(fake_mask).__next__()
-    T_index , V_index    = split_2.split(TV_index).__next__()
-    T_index , V_index    = TV_index[T_index], TV_index[V_index]
+    T_index , V_index = split_2.split(TV_index).__next__()
+    T_index , V_index = TV_index[T_index], TV_index[V_index]
 
     if subset is not None:
         train_mask[subset[T_index]] = 1

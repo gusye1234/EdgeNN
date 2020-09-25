@@ -6,7 +6,7 @@ import numpy as np
 from world import join, CONFIG
 from utils import timer, Path3, set_seed
 from data import loadAFL
-from loss import CrossEntropy
+from loss import CrossEntropy, EdgeLoss
 from tabulate import tabulate
 from tensorboardX import SummaryWriter
 
@@ -33,7 +33,7 @@ elif CONFIG['model'] == 'gcn':
     from model import GCNP
     MODEL = GCNP(CONFIG, dataset)
 
-print([name for name, para in list(MODEL.named_parameters())])
+# print([name for name, para in list(MODEL.named_parameters())])
 
 
 optim = torch.optim.Adam(MODEL.parameters(),
@@ -42,7 +42,9 @@ optim = torch.optim.Adam(MODEL.parameters(),
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=optim,
                                                        factor=CONFIG['decay_factor'],
                                                        patience=CONFIG['decay_patience'])
-LOSS = CrossEntropy()
+# LOSS = CrossEntropy()
+LOSS = EdgeLoss(graph=dataset,
+                **CONFIG)
 
 #################################
 # logger
@@ -68,29 +70,34 @@ for epoch in range(1, CONFIG['epoch']+1):
         MODEL.train()
         probability = MODEL()
         # TODO: Loss function?
-        loss = LOSS(probability[dataset['train mask']],
-                    dataset['labels'][dataset['train mask']])
+        loss = LOSS(probability, dataset['labels'], dataset['train mask'])
         optim.zero_grad()
         loss.backward()
         optim.step()
 
         with torch.no_grad():
-            report['train loss'] = loss.item()
-            report['valid loss'] = LOSS(probability[dataset['valid mask']],
-                                        dataset['labels'][dataset['valid mask']]).item()
             MODEL.eval()
+            report['train loss'] = loss.item()
+            probability_valid = MODEL()
+            # probability_valid = probability
+            # print(probability['poss_node'][:5])
+            report['valid loss'] = LOSS(probability_valid,
+                                        dataset['labels'],
+                                        dataset['valid mask']).item()
+
             # remove unaligned dim
-            prediction = probability[:, :-1].argmax(dim=1)
+            prediction = probability['poss_node'][:, :-1].argmax(dim=1)
+            prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
             # TODO: Loss function?
             report['train acc'] = utils.accuracy(prediction,
                                                 dataset['labels'],
                                                 dataset['train mask'])
-            report['valid acc'] = utils.accuracy(prediction,
+            report['valid acc'] = utils.accuracy(prediction_valid,
                                                 dataset['labels'],
                                                 dataset['valid mask'])
 
 
-    print(f"[{epoch}/{CONFIG['epoch']}] : {timer.get():.3f}|"
+    print(f"[{epoch}/{CONFIG['epoch']}] : {timer.get():.3f}/{timer.get():.3f}|"
           f" T loss {report['train loss']:.4f}|"
           f" T acc {report['train acc']:.2f}|"
           f" V loss {report['valid loss']:.4f}|"
@@ -108,13 +115,15 @@ for epoch in range(1, CONFIG['epoch']+1):
 #################################
 final_report = earlystop.best_result
 with torch.no_grad():
+    MODEL.eval()
     probability = MODEL()
-    prediction = probability[:, :-1].argmax(dim=1)
+    prediction = probability['poss_node'][:, :-1].argmax(dim=1)
     final_report['test acc'] = utils.accuracy(prediction,
                                               dataset['labels'],
                                               dataset['test mask'])
-    final_report['test loss'] = LOSS(probability[dataset['test mask']],
-                                     dataset['labels'][dataset['test mask']]).item()
+    final_report['test loss'] = LOSS(probability,
+                                     dataset['labels'],
+                                     dataset['test mask']).item()
 
 try:
     handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
