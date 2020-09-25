@@ -137,7 +137,7 @@ class Graph:
         {self.__dict['name']}({str(self.device)}):
             Adj matrix     -> {self.__dict['adj matrix'].shape}
             Feature matrix -> {self.__dict['features'].shape}
-            Label vector   -> {self.__dict['labels'].shape}
+            Label          -> {np.unique(self.__dict['labels'].cpu().numpy())}
             Spilt          -> {splits} = {sum(splits)}
             EDGE:
                 Train      -> {self.count_edges(self.__dict['train mask'])}

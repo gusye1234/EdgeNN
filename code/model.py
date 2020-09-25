@@ -28,34 +28,38 @@ class BasicModel(Module):
         poss_node /= torch.FloatTensor(self.G.neighbours_sum()).to(world.DEVICE)
         return {'poss_node':poss_node, 'poss_edge': poss_edge}
 
+
 class EmbeddingP(BasicModel):
-    def __init__(self, CONFIG, G : Graph):
+    def __init__(self, CONFIG, G: Graph):
         super(EmbeddingP, self).__init__()
         self.G = G
         self.num_nodes = CONFIG['the number of nodes']
-        self.num_dims  = CONFIG['the number of embed dims']
+        self.num_dims = CONFIG['the number of embed dims']
         self.num_class = CONFIG['the number of classes']
+        self.feature_dim = CONFIG['the dimension of features']
         self.init()
 
+    # def operator(self, src, dst):
+    #     return src + dst
+
     def operator(self, src, dst):
-        return src + dst
+        E1 = (src + dst) / 2
+        E2 = (src - dst).pow(2)
+        return torch.cat([E1, E2], dim=1)
 
     def init(self):
-        self.node_embedding = torch.nn.Embedding(
-            self.num_nodes, self.num_dims
-        )
-        self.trans = nn.Sequential(
-            nn.Linear(self.num_dims, 32),
-            nn.ReLU(),
-            nn.Linear(32, self.num_class + 1),
-            nn.ReLU(),
-            nn.Softmax(dim=1)
-        )
-        nn.init.normal_(self.node_embedding.weight)
+        # self.node_embedding = torch.nn.Embedding(
+        #     self.num_nodes, self.num_dims
+        # )
+        self.embed = nn.Linear(self.feature_dim, self.num_dims)
+        self.trans = nn.Sequential(nn.Linear(self.num_dims * 2, 16), nn.ReLU(),
+                                   nn.Linear(16, self.num_class + 1),
+                                   nn.ReLU(), nn.Softmax(dim=1))
+        # nn.init.normal_(self.node_embedding.weight)
 
     def predict_edges(self, src, dst):
-        src_embed = self.node_embedding(src)
-        dst_embed = self.node_embedding(dst)
+        src_embed = self.embed(self.G['features'][src])
+        dst_embed = self.embed(self.G['features'][dst])
         E = self.operator(src_embed, dst_embed)
         return self.trans(E)
 

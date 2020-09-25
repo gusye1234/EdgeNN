@@ -96,7 +96,10 @@ for epoch in range(1, CONFIG['epoch']+1):
                                                 dataset['labels'],
                                                 dataset['valid mask'])
 
-
+    logger.add_scalar('train loss', report['train loss'], epoch)
+    logger.add_scalar('valid loss', report['valid loss'], epoch)
+    logger.add_scalar('valid acc', report['valid acc'], epoch)
+    logger.add_scalar('train acc', report['train acc'], epoch)
     print(f"[{epoch}/{CONFIG['epoch']}] : {timer.get():.3f}/{timer.get():.3f}|"
           f" T loss {report['train loss']:.4f}|"
           f" T acc {report['train acc']:.2f}|"
