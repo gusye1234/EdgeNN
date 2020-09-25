@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('--gcn_hidden', type=int, default=16)
     parser.add_argument('--dropout_rate', type=float, default=0.5)
     parser.add_argument('--edge_lambda', type=float, default=0.0001)
-    parser.add_argument('--semi_lambda', type=float, default=0.01)
+    parser.add_argument('--semi_lambda', type=float, default=0.)
     args = parser.parse_args()
     return args
 
