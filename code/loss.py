@@ -43,7 +43,8 @@ class EdgeLoss(BasicLoss):
         loss = F.nll_loss(log_likelihood, groundTruth_mask.long())
         #
         intrust = probability['poss_edge'][:, -1].detach()
-        edges = torch.LongTensor([(pair[0], pair[1]) for pair, _ in self.G.edges()]).to(world.DEVICE)
+        # edges = torch.LongTensor([(pair[0], pair[1]) for pair, _ in self.G.edges()]).to(world.DEVICE)
+        edges, weights = self.G.edges_tensor()
         #
         semi_loss = torch.sum((1 - intrust) * torch.sum(
             (probability['poss_edge'][edges[:, 0]] -
@@ -52,17 +53,21 @@ class EdgeLoss(BasicLoss):
         #
         poss_edge = probability['poss_edge']
         edge_loss = 0.
-        for i, edge in enumerate(edges):
-            if mask[edge[0]] or mask[edge[1]]:
-                if mask[edge[0]] and mask[edge[1]]:
-                    if groundTruth[edge[0]] == groundTruth[edge[1]]:
-                        edge_loss += -torch.log(poss_edge[i][groundTruth[edge[0]]])
-                    else:
-                        edge_loss += -torch.log(poss_edge[i][-1])
-                else:
-                    labeled = edge[0] if mask[edge[0]] else edge[1]
-                    edge_loss += -torch.log(poss_edge[i][-1] +
-                                            poss_edge[i][groundTruth[labeled]])
+        # TODO
+        label_mask = mask[edges[:, 0]] | mask[edges[:, 1]]
+        both_label = mask[edges[:, 0]] & mask[edges[:, 1]]
+        single_label = label_mask - both_label 
+        # for i, edge in enumerate(edges):
+        #     if mask[edge[0]] or mask[edge[1]]:
+        #         if mask[edge[0]] and mask[edge[1]]:
+        #             if groundTruth[edge[0]] == groundTruth[edge[1]]:
+        #                 edge_loss += -torch.log(poss_edge[i][groundTruth[edge[0]]])
+        #             else:
+        #                 edge_loss += -torch.log(poss_edge[i][-1])
+        #         else:
+        #             labeled = edge[0] if mask[edge[0]] else edge[1]
+        #             edge_loss += -torch.log(poss_edge[i][-1] +
+        #                                     poss_edge[i][groundTruth[labeled]])
         edge_loss *= self.edge_lambda
         # print(loss, semi_loss, edge_loss)
         return loss + semi_loss + edge_loss

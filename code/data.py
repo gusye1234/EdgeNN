@@ -90,9 +90,9 @@ def loadAFL(name, splitFile=None, trainP=0.8, valP=0.1, testP=0.1):
         "labels": torch.LongTensor(L),
         "features": torch.Tensor(F),
         "adj matrix": A,
-        "test mask": test__mask,
-        "train mask": train_mask,
-        "valid mask": valid_mask,
+        "test mask":torch.ByteTensor(test__mask),
+        "train mask": torch.ByteTensor(train_mask),
+        "valid mask": torch.ByteTensor(valid_mask),
     })
 
 
@@ -111,8 +111,11 @@ class Graph:
         self.__edges_A =  self.__dict['adj matrix'].todok()
         self.adj = sparse_mx_to_torch_sparse_tensor(
             preprocess_adj(self.__dict['adj matrix']))
-        self.sum = self.__index_A.sum(1)
+        self.sum = torch.FloatTensor(self.__index_A.sum(1))
         self.device = 'cpu'
+        Edges = torch.Tensor([(pair[0], pair[1], weights) for pair, weights in self.edges()])
+        self.tensor_edges = Edges[:, :2].long()
+        self.tensor_weights = Edges[:, 2]
 
     def num_nodes(self):
         return len(self.__dict['labels'])
@@ -124,6 +127,9 @@ class Graph:
         self.__dict['labels'] = self.__dict['labels'].to(device)
         self.__dict['features'] = self.__dict['features'].to(device)
         self.adj = self.adj.to(device)
+        self.tensor_edges = self.tensor_edges.to(device)
+        self.tensor_weights = self.tensor_weights.to(device)
+        self.sum = self.sum.to(device)
         self.device = device
         return self
 
@@ -179,6 +185,9 @@ class Graph:
     def edges(self):
         for pair, weight in self.__edges_A.items():
             yield (pair, weight)
+
+    def edges_tensor(self):
+        return self.tensor_edges, self.tensor_weights
 
     # def update_predict(self, labels):
     #     """using newly predicted labels"""

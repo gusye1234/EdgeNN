@@ -19,13 +19,15 @@ class BasicModel(Module):
 
     def forward(self):
         'predict all the label'
-        edges = torch.LongTensor([(pair[0], pair[1]) for pair, _ in self.G.edges()]).to(world.DEVICE)
+        edges, weights = self.G.edges_tensor()
         poss_edge = self.predict_edges(edges[:, 0], edges[:, 1])
         poss_node = torch.zeros(self.num_nodes,
                              self.num_class + 1).to(world.DEVICE)
-        for i, (edge, weight) in enumerate(self.G.edges()):
-            poss_node[edge[0]] += poss_edge[i]*weight
-        poss_node /= torch.FloatTensor(self.G.neighbours_sum()).to(world.DEVICE)
+
+        value = poss_edge * weights.unsqueeze(1)
+        index = edges[:, 0].repeat(self.num_class + 1, 1).t()
+        poss_node.scatter_add_(0, index, value)
+        poss_node /= self.G.neighbours_sum()
         return {'poss_node':poss_node, 'poss_edge': poss_edge}
 
 

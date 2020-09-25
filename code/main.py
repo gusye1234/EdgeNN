@@ -66,48 +66,58 @@ print(utils.dict2table(CONFIG))
 #################################
 for epoch in range(1, CONFIG['epoch']+1):
     report = {}
-    with timer():
-        MODEL.train()
-        probability = MODEL()
+    with timer(name='total'):
+        with timer(name='F'):
+            MODEL.train()
+            probability = MODEL()
         # TODO: Loss function?
-        loss = LOSS(probability, dataset['labels'], dataset['train mask'])
-        optim.zero_grad()
-        loss.backward()
-        optim.step()
+        with timer(name='L'):
+            loss = LOSS(probability, dataset['labels'], dataset['train mask'])
+        with timer(name='B'):
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
 
         with torch.no_grad():
             MODEL.eval()
             report['train loss'] = loss.item()
-            probability_valid = MODEL()
+            with timer(name='F'):
+                probability_valid = MODEL()    
             # probability_valid = probability
             # print(probability['poss_node'][:5])
-            report['valid loss'] = LOSS(probability_valid,
-                                        dataset['labels'],
-                                        dataset['valid mask']).item()
+            with timer(name='L'):
+                report['valid loss'] = LOSS(probability_valid,
+                                            dataset['labels'],
+                                            dataset['valid mask']).item()
 
             # remove unaligned dim
-            prediction = probability['poss_node'][:, :-1].argmax(dim=1)
-            prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
-            # TODO: Loss function?
-            report['train acc'] = utils.accuracy(prediction,
-                                                dataset['labels'],
-                                                dataset['train mask'])
-            report['valid acc'] = utils.accuracy(prediction_valid,
-                                                dataset['labels'],
-                                                dataset['valid mask'])
+            with timer(name='M'):
+                prediction = probability['poss_node'][:, :-1].argmax(dim=1)
+                prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
+                # TODO: Loss function?
+                report['train acc'] = utils.accuracy(prediction,
+                                                    dataset['labels'],
+                                                    dataset['train mask'])
+                report['valid acc'] = utils.accuracy(prediction_valid,
+                                                    dataset['labels'],
+                                                    dataset['valid mask'])
 
-    logger.add_scalar('train loss', report['train loss'], epoch)
-    logger.add_scalar('valid loss', report['valid loss'], epoch)
-    logger.add_scalar('valid acc', report['valid acc'], epoch)
-    logger.add_scalar('train acc', report['train acc'], epoch)
-    print(f"[{epoch}/{CONFIG['epoch']}] : {timer.get():.3f}/{timer.get():.3f}|"
-          f" T loss {report['train loss']:.4f}|"
-          f" T acc {report['train acc']:.2f}|"
-          f" V loss {report['valid loss']:.4f}|"
+    print(f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
+          f" T loss {report['train loss']:.3f}#"
+          f" T acc {report['train acc']:.2f}#"
+          f" V loss {report['valid loss']:.3f}#"
           f" V acc {report['valid acc']:.2f}", end='')
+    timer.zero()
+    if CONFIG['tensorboard']:
+        logger.add_scalar('train loss', report['train loss'], epoch)
+        logger.add_scalar('valid loss', report['valid loss'], epoch)
+        logger.add_scalar('valid acc', report['valid acc'], epoch)
+        logger.add_scalar('train acc', report['train acc'], epoch)
+        
     if np.isnan(report['train loss']) or np.isnan(report['valid loss']):
-        import ipdb
-        ipdb.set_trace()
+        # import ipdb
+        # ipdb.set_trace()
+        exit()
     scheduler.step(report['valid loss'])
     if earlystop.step(epoch, report, 'valid acc'):
         break
