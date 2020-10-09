@@ -49,32 +49,37 @@ class EdgeLoss(BasicLoss):
             loss += F.nll_loss(log_likelihood, groundTruth_mask.long())
         #
         edges, weights = self.G.edges_tensor()
-        peak = 5
-        peak_candi = np.random.randint(len(edges), size=(peak, ))
-        peak_list = []
-        peak_prob = []
-        # print(probability['poss_edge'][peak_candi])
+        
+        # ==========================================================
+        # peak = 1000
+        # peak_candi = np.random.randint(len(edges), size=(peak, ))
+        # peak_list = []
+        # peak_prob = []
+        # for i in peak_candi:
+        #     edge = edges[i]
+        #     if mask[edge[0]] and mask[edge[1]]:
+        #         peak_list.append((groundTruth[edge[0]].item(), groundTruth[edge[1]].item()))
+        #         if groundTruth[edge[0]] == groundTruth[edge[1]]:
+        #             peak_prob.append(
+        #                 probability['poss_edge'][i][groundTruth[edge[1]]].item())
+        #         else:
+        #             peak_prob.append(probability['poss_edge'][i][-1].item())
+        #     else:
+        #         if mask[edge[0]] or mask[edge[1]]:
+        #             label = groundTruth[edge[0]] if mask[edge[0]] else groundTruth[edge[1]]
+        #             peak_list.append((label.item(), '-1'))
+        #             peak_prob.append(probability['poss_edge'][i][label].item() + probability['poss_edge'][i][-1].item())
+        #         else:
+        #             continue
+        # count = 0
+        # for i, j in zip(peak_list, peak_prob):
+        #     if j < 0.5:
+        #         count += 1
+        #         # print(f"{j:.3f} : {i}")
+        # print(count)
+        # ==========================================================
 
-        for i in peak_candi:
-            edge = edges[i]
-            if mask[edge[0]] and mask[edge[1]]:
-                peak_list.append((groundTruth[edge[0]], groundTruth[edge[1]]))
-                if groundTruth[edge[0]] == groundTruth[edge[1]]:
-                    peak_prob.append(
-                        probability['poss_edge'][i][groundTruth[edge[1]]])
-                else:
-                    peak_prob.append(
-                        probability['poss_edge'][i][-1]])
-            else:
-                if mask[edge[0]] or mask[edge[1]]:
-                    label = groundTruth[edge[0]] if mask[edge[0]] else groundTruth[edge[1]]
-                    peak_list.append((label, 'Undefined'))
-                    peak_prob.append(probability['poss_edge'][label] + probability['poss_edge'][-1])
-                else:
-                    peak_list.append(('Undefined', 'Undefined'))
-                    peak_prob.append(-1)
-        print(peak_list)
-        print(peak_prob)
+
         if 'semi' in self.select:
             intrust = probability['poss_edge'][:, -1].detach()
             if self.semi_lambda >= 1e-9:
@@ -118,18 +123,20 @@ class EdgeLoss(BasicLoss):
             edge_loss *= self.edge_lambda
             edge_loss /= torch.sum(label_mask)
             loss += edge_loss
-        # The above code is equal to below:
-        '''
-        for i, edge in enumerate(edges):
-            if mask[edge[0]] or mask[edge[1]]:
-                if mask[edge[0]] and mask[edge[1]]:
-                    if groundTruth[edge[0]] == groundTruth[edge[1]]:
-                        edge_loss += -torch.log(poss_edge[i][groundTruth[edge[0]]])
-                    else:
-                        edge_loss += -torch.log(poss_edge[i][-1])
-                else:
-                    labeled = edge[0] if mask[edge[0]] else edge[1]
-                    edge_loss += -torch.log(poss_edge[i][-1] +
-                                            poss_edge[i][groundTruth[labeled]])
-        '''
+            # The above code is equal to below:
+            # edge_loss1 = 0.
+            # for i, edge in enumerate(edges):
+            #     if mask[edge[0]] or mask[edge[1]]:
+            #         if mask[edge[0]] and mask[edge[1]]:
+            #             if groundTruth[edge[0]] == groundTruth[edge[1]]:
+            #                 edge_loss1 += -torch.log(poss_edge[i][groundTruth[edge[0]]])
+            #             else:
+            #                 edge_loss1 += -torch.log(poss_edge[i][-1])
+            #         else:
+            #             labeled = edge[0] if mask[edge[0]] else edge[1]
+            #             edge_loss1 += -torch.log(poss_edge[i][-1] +
+            #                                     poss_edge[i][groundTruth[labeled]])
+            # edge_loss1 *= self.edge_lambda
+            # edge_loss1 /= torch.sum(label_mask)
+            # print(edge_loss1.item(), edge_loss.item())
         return loss

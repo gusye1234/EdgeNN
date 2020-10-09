@@ -54,9 +54,8 @@ class EmbeddingP(BasicModel):
         #     self.num_nodes, self.num_dims
         # )
         self.embed = nn.Linear(self.feature_dim, self.num_dims)
-        self.trans = nn.Sequential(nn.Linear(self.num_dims * 2, 16), nn.ReLU(),
-                                   nn.Linear(16, self.num_class + 1),
-                                   nn.ReLU(), nn.Softmax(dim=1))
+        self.trans = nn.Sequential(nn.Linear(self.num_dims * 2, self.num_class + 1),
+                                   nn.Softmax(dim=1))
         # nn.init.normal_(self.node_embedding.weight)
 
     def predict_edges(self, src, dst):
@@ -118,6 +117,19 @@ class GCN(nn.Module):
         return x
 
 
+class GCN_single(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout):
+        super(GCN_single, self).__init__()
+        self.gc1 = GraphConvolution(nfeat, nclass)
+        # self.gc2 = GraphConvolution(nhid, nclass)
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        x = self.gc1(x, adj)
+        # return F.log_softmax(x, dim=1)
+        return x
+
+
 class GCNP(BasicModel):
     def __init__(self, CONFIG, G):
         super(GCNP, self).__init__()
@@ -129,10 +141,7 @@ class GCNP(BasicModel):
         hidden_dim = CONFIG['gcn_hidden']
         dropout = CONFIG['dropout_rate']
         self.gcn = GCN(self.num_features, hidden_dim, self.num_dims, dropout)
-        self.trans = nn.Sequential(nn.Linear(self.num_dims*2, 16),
-                                   nn.ReLU(),
-                                   nn.Linear(16, self.num_class + 1),
-                                   nn.ReLU(),
+        self.trans = nn.Sequential(nn.Linear(self.num_dims*2, self.num_class + 1),
                                    nn.Softmax(dim=1))
 
     def operator(self, src, dst):

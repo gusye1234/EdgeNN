@@ -166,7 +166,7 @@ class Graph:
                     else:
                         edge_count[1] += 1
                 else:
-                    labeled = edge[0] if mask[edge[0]] else edge[1]
+                    # labeled = edge[0] if mask[edge[0]] else edge[1]
                     edge_count[2] += 1
             else:
                 edge_count[3] += 1

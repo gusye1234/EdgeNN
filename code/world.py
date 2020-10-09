@@ -15,7 +15,7 @@ def parse_args():
     # TODO
     parser.add_argument('--dim', type=int, default=8)
     parser.add_argument('--lr', type=float, default=0.05)
-    parser.add_argument('--decay', type=float, default=5e-6)
+    parser.add_argument('--decay', type=float, default=5e-2)
     parser.add_argument('--epoch', type=int, default=3000)
     parser.add_argument('--decay_factor', type=float, default=0.8)
     parser.add_argument('--decay_patience', type=int, default=50)

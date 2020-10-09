@@ -73,63 +73,65 @@ for epoch in range(1, CONFIG['epoch'] + 1):
             loss_edge.backward()
             optim.step()
             report['edge_loss'] = loss_edge.item()
+        with timer(name='FL'):
+            MODEL.train()
+            probability = MODEL()
+            loss = LOSS_task(probability, dataset['labels'],dataset['train mask'])
+        with timer(name='B'):
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+        # print(loss_edge.item(), loss.item())
+        with torch.no_grad():
+            MODEL.eval()
+            report['train loss'] = loss.item()
+            with timer(name='F'):
+                probability_valid = MODEL()
+            # probability_valid = probability
+            # print(probability['poss_node'][:5])
+            with timer(name='L'):
+                report['valid loss'] = LOSS_task(probability_valid,
+                                            dataset['labels'],
+                                            dataset['valid mask']).item()
 
-        # with timer(name='FL'):
-        #     MODEL.train()
-        #     probability = MODEL()
-        #     loss = LOSS_task(probability, dataset['labels'],dataset['train mask'])
-        # with timer(name='B'):
-        #     optim.zero_grad()
-        #     loss.backward()
-        #     optim.step()
+            # remove unaligned dim
+            with timer(name='M'):
+                prediction = probability['poss_node'][:, :-1].argmax(dim=1)
+                prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
+                # TODO: Loss function?
+                report['train acc'] = utils.accuracy(prediction,
+                                                     dataset['labels'],
+                                                     dataset['train mask'])
+                report['valid acc'] = utils.accuracy(prediction_valid,
+                                                     dataset['labels'],
+                                                     dataset['valid mask'])
+                report['test acc'] = utils.accuracy(prediction_valid,
+                                                     dataset['labels'],
+                                                     dataset['test mask'])
 
-        # with torch.no_grad():
-        #     MODEL.eval()
-        #     report['train loss'] = loss.item()
-        #     with timer(name='F'):
-        #         probability_valid = MODEL()
-        #     # probability_valid = probability
-        #     # print(probability['poss_node'][:5])
-        #     with timer(name='L'):
-        #         report['valid loss'] = LOSS_task(probability_valid,
-        #                                     dataset['labels'],
-        #                                     dataset['valid mask']).item()
+    print(
+        f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
+        f" E loss {report['edge_loss']:.3f}#"
+        f" T loss {report['train loss']:.3f}#"
+        f" T acc {report['train acc']:.2f}#"
+        f" V loss {report['valid loss']:.3f}#"
+        f" V acc {report['valid acc']:.2f}",
+        f" Acc {report['test acc']:.2f}",
+        end='')
+    timer.zero()
+    if CONFIG['tensorboard']:
+        logger.add_scalar('train loss', report['train loss'], epoch)
+        logger.add_scalar('valid loss', report['valid loss'], epoch)
+        logger.add_scalar('valid acc', report['valid acc'], epoch)
+        logger.add_scalar('train acc', report['train acc'], epoch)
 
-        #     # remove unaligned dim
-        #     with timer(name='M'):
-        #         prediction = probability['poss_node'][:, :-1].argmax(dim=1)
-        #         prediction_valid = probability_valid[
-        #             'poss_node'][:, :-1].argmax(dim=1)
-        #         # TODO: Loss function?
-        #         report['train acc'] = utils.accuracy(prediction,
-        #                                              dataset['labels'],
-        #                                              dataset['train mask'])
-        #         report['valid acc'] = utils.accuracy(prediction_valid,
-        #                                              dataset['labels'],
-        #                                              dataset['valid mask'])
-
-    # print(
-    #     f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
-    #     f" E loss {report['edge_loss']:.3f}#"
-    #     f" T loss {report['train loss']:.3f}#"
-    #     f" T acc {report['train acc']:.2f}#"
-    #     f" V loss {report['valid loss']:.3f}#"
-    #     f" V acc {report['valid acc']:.2f}",
-    #     end='')
-    # timer.zero()
-    # if CONFIG['tensorboard']:
-    #     logger.add_scalar('train loss', report['train loss'], epoch)
-    #     logger.add_scalar('valid loss', report['valid loss'], epoch)
-    #     logger.add_scalar('valid acc', report['valid acc'], epoch)
-    #     logger.add_scalar('train acc', report['train acc'], epoch)
-
-    # if np.isnan(report['train loss']) or np.isnan(report['valid loss']):
-    #     # import ipdb
-    #     # ipdb.set_trace()
-    #     exit()
-    # scheduler.step(report['valid loss'])
-    # if earlystop.step(epoch, report, 'valid acc'):
-    #     break
+    if np.isnan(report['train loss']) or np.isnan(report['valid loss']):
+        # import ipdb
+        # ipdb.set_trace()
+        exit()
+    scheduler.step(report['valid loss'])
+    if earlystop.step(epoch, report, 'valid acc'):
+        break
     print()
 
 #################################
