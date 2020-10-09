@@ -380,7 +380,7 @@ def generate_mask(length, trainP, valP, testP, subset=None):
         train_mask[T_index] = 1
         valid_mask[V_index] = 1
         test__mask[t_index] = 1
-    print("SEE", train_mask.sum(), valid_mask.sum(), test__mask.sum())
+    # print("SEE", train_mask.sum(), valid_mask.sum(), test__mask.sum())
     return train_mask, valid_mask, test__mask
 
 

@@ -143,7 +143,7 @@ torch.save(earlystop.best_model, earlystop.filename)
 try:
     handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
     info = f'''
-    lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, factor:{CONFIG['decay_factor']}, stop:{earlystop.best_epoch}/{CONFIG['epoch']}
+    lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, semi: {CONFIG['semi_lambda']}, edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{earlystop.best_epoch}/{CONFIG['epoch']}
     '''
     handler.write(info)
     handler.write(utils.dict2table(final_report, headers='firstrow'))
