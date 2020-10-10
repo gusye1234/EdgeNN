@@ -45,8 +45,19 @@ class EmbeddingP(BasicModel):
     #     return src + dst
 
     def operator(self, src, dst):
+        return self.operator_naive(src, dst)
+
+    def operator_naive(self, src, dst):
+        return torch.cat([src, dst], dim=1)
+
+    def operator_sy1(self, src, dst):
         E1 = (src + dst) / 2
         E2 = (src - dst).pow(2)
+        return torch.cat([E1, E2], dim=1)
+
+    def operator_sy2(self,src, dst):
+        E1 = (src + dst) / 2
+        E2 = (src - dst).abs()
         return torch.cat([E1, E2], dim=1)
 
     def init(self):
@@ -59,8 +70,9 @@ class EmbeddingP(BasicModel):
         # nn.init.normal_(self.node_embedding.weight)
 
     def predict_edges(self, src, dst):
-        src_embed = self.embed(self.G['features'][src])
-        dst_embed = self.embed(self.G['features'][dst])
+        embed = self.embed(self.G['features'])
+        src_embed = embed[src]
+        dst_embed = embed[dst]
         E = self.operator(src_embed, dst_embed)
         return self.trans(E)
 
@@ -148,6 +160,7 @@ class GCNP(BasicModel):
         E1 = (src + dst)/2
         E2 = (src - dst).pow(2)
         return torch.cat([E1, E2], dim=1)
+        # return torch.cat([src, dst], dim=1)
 
     def predict_edges(self, src, dst):
         embedding = self.gcn(self.G['features'], self.G.adj)

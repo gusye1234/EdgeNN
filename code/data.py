@@ -21,15 +21,15 @@ from sklearn.model_selection import ShuffleSplit
 
 # Possible datasets layout
 _all_datasets = {
-    "chameleon": join(world.DATA, "chameleon"),
-    "wisconsin": join(world.DATA, "wisconsin"),
-    "squirrel" : join(world.DATA, "squirrel"),
-    "cornell"  : join(world.DATA, "cornell"),
-    "texas"    : join(world.DATA, "texas"),
+    "cham": join(world.DATA, "chameleon"),
+    "wisc": join(world.DATA, "wisconsin"),
+    "squi" : join(world.DATA, "squirrel"),
+    "corn"  : join(world.DATA, "cornell"),
+    "texa"    : join(world.DATA, "texas"),
     "film"     : join(world.DATA, "film"),
-    "pubmed"   : join(world.DATA, "INDS"),
+    "pubm"   : join(world.DATA, "INDS"),
     # below datasets have unconnected nodes.
-    "citeseer" : join(world.DATA, "INDS"),
+    "cite" : join(world.DATA, "INDS"),
     "cora"     : join(world.DATA, "INDS"),
 }
 _splits_files = join(world.DATA, "SPLITS")
@@ -139,6 +139,7 @@ class Graph:
             self.__dict['valid mask'].sum().item(),
             self.__dict['test mask'].sum().item(),
         )
+        assert all((self.__dict['train mask'] + self.__dict['valid mask'] + self.__dict['test mask']) < 2)
         flag = f"""
         {self.__dict['name']}({str(self.device)}):
             Adj matrix     -> {self.__dict['adj matrix'].shape}

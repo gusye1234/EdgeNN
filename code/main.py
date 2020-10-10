@@ -16,7 +16,7 @@ set_seed(2020)
 # data
 #################################
 dataset = loadAFL(CONFIG['dataset'],)
-                #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
+                  splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]

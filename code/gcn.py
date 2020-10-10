@@ -14,8 +14,8 @@ set_seed(2020)
 #################################
 # data
 #################################
-dataset = loadAFL(CONFIG['dataset'],
-                  splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_2.npz")
+dataset = loadAFL(CONFIG['dataset'])
+                #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_2.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
@@ -49,7 +49,6 @@ for epoch in range(1, CONFIG['epoch']+1):
     with timer(name='total'):
         net.train()
         train_logits = net(dataset['features'], dataset.adj)
-        print(torch.std(F.softmax(train_logits.data, 1), dim=0))
         train_logp = F.log_softmax(train_logits, 1)
         train_loss = F.nll_loss(train_logp[dataset['train mask']], labels[dataset['train mask']])
         train_pred = train_logp.argmax(dim=1)

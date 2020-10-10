@@ -292,4 +292,5 @@ if __name__ == "__main__":
     from data import all_datasets
     from data import loadAFL
     for dataset in all_datasets():
-        vis_ConfusedMatrix(loadAFL(dataset))
+        print(loadAFL(dataset))
+        # vis_ConfusedMatrix(loadAFL(dataset))
