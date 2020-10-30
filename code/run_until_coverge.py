@@ -4,18 +4,19 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from world import join, CONFIG
-from utils import timer, Path3, set_seed
+from utils import timer, Path3, set_seed, table_info
 from data import loadAFL
 from loss import CrossEntropy, EdgeLoss
 from tabulate import tabulate
 from tensorboardX import SummaryWriter
 
-set_seed(2020)
+seed = world.SEED
+set_seed(seed)
 #################################
 # data
 #################################
 dataset = loadAFL(CONFIG['dataset'])
-                #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
+#   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
@@ -26,8 +27,9 @@ unique_name = utils.uniqueFileFlag()
 #################################
 
 if CONFIG['model'] == 'embedding':
-    from model import EmbeddingP
-    MODEL = EmbeddingP(CONFIG, dataset)
+    from model import EmbeddingP, EmbeddingP_multiLayer
+    # MODEL = EmbeddingP(CONFIG, dataset)
+    MODEL = EmbeddingP_multiLayer(CONFIG, dataset)
 elif CONFIG['model'] == 'gcn':
     from model import GCNP
     MODEL = GCNP(CONFIG, dataset)
@@ -59,7 +61,7 @@ print(dataset)
 print(utils.dict2table(CONFIG))
 
 #################################
-# main train loop
+# main training loop
 #################################
 for epoch in range(1, CONFIG['epoch'] + 1):
     report = {}
@@ -96,8 +98,13 @@ for epoch in range(1, CONFIG['epoch'] + 1):
 
             # remove unaligned dim
             with timer(name='M'):
+                unlabeled = (~dataset['train mask'])
+                values, args = torch.topk(torch.max(probability['poss_node'][unlabeled][:, :-1], dim=1)[0], 10)
                 prediction = probability['poss_node'][:, :-1].argmax(dim=1)
                 prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
+                print(values)
+                print(prediction[unlabeled][args])
+                print(dataset['labels'][unlabeled][args])
                 # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
                                                      dataset['labels'],
@@ -110,7 +117,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
                                                      dataset['test mask'])
 
     print(
-        f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
+        # f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
+        f"[{epoch:4}/{CONFIG['epoch']}] : "
         f" E loss {report['edge_loss']:.3f}#"
         f" T loss {report['train loss']:.3f}#"
         f" T acc {report['train acc']:.2f}#"
@@ -150,9 +158,7 @@ with torch.no_grad():
 torch.save(earlystop.best_model, earlystop.filename)
 try:
     handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
-    info = f'''
-    lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, semi: {CONFIG['semi_lambda']}, edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{earlystop.best_epoch}/{CONFIG['epoch']}
-    '''
+    info = table_info(earlystop.best_epoch, seed)
     handler.write(info)
     handler.write(utils.dict2table(final_report, headers='firstrow'))
     handler.write('\n')

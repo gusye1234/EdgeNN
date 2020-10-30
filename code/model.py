@@ -17,18 +17,24 @@ class BasicModel(Module):
     def predict_edges(self, src, dst):
         raise NotImplementedError
 
+    def forward_withEdge(self, poss_edge):
+        'Given edge feature, forward into nodes feature'
+        edges, weights = self.G.edges_tensor()
+        dims = poss_edge.shape[-1]
+        poss_node = torch.zeros(self.num_nodes,
+                                dims).to(world.DEVICE)
+
+        value = poss_edge * weights.unsqueeze(1)
+        index = edges[:, 0].repeat(dims, 1).t()
+        poss_node.scatter_add_(0, index, value)
+        poss_node /= self.G.neighbours_sum()
+        return {'poss_node': poss_node, 'poss_edge': poss_edge}
+
     def forward(self):
         'predict all the label'
         edges, weights = self.G.edges_tensor()
         poss_edge = self.predict_edges(edges[:, 0], edges[:, 1])
-        poss_node = torch.zeros(self.num_nodes,
-                             self.num_class + 1).to(world.DEVICE)
-
-        value = poss_edge * weights.unsqueeze(1)
-        index = edges[:, 0].repeat(self.num_class + 1, 1).t()
-        poss_node.scatter_add_(0, index, value)
-        poss_node /= self.G.neighbours_sum()
-        return {'poss_node':poss_node, 'poss_edge': poss_edge}
+        return self.forward_withEdge(poss_edge)
 
 
 class EmbeddingP(BasicModel):
@@ -45,7 +51,7 @@ class EmbeddingP(BasicModel):
     #     return src + dst
 
     def operator(self, src, dst):
-        return self.operator_naive(src, dst)
+        return self.operator_sy2(src, dst)
 
     def operator_naive(self, src, dst):
         return torch.cat([src, dst], dim=1)
@@ -76,6 +82,52 @@ class EmbeddingP(BasicModel):
         E = self.operator(src_embed, dst_embed)
         return self.trans(E)
 
+
+class EmbeddingP_multiLayer(BasicModel):
+    def __init__(self, CONFIG, G: Graph):
+        super(EmbeddingP_multiLayer, self).__init__()
+        self.G = G
+        self.recursion = 2
+        self.num_nodes = CONFIG['the number of nodes']
+        self.num_dims = CONFIG['the number of embed dims']
+        self.num_class = CONFIG['the number of classes']
+        self.hidden_dims = CONFIG['gcn_hidden']
+        self.feature_dim = CONFIG['the dimension of features']
+        self.init()
+
+    # def operator(self, src, dst):
+    #     return src + dst
+
+    def operator(self, src, dst):
+        return self.operator_sy2(src, dst)
+
+    def operator_naive(self, src, dst):
+        return torch.cat([src, dst], dim=1)
+
+    def operator_sy1(self, src, dst):
+        E1 = (src + dst) / 2
+        E2 = (src - dst).pow(2)
+        return torch.cat([E1, E2], dim=1)
+
+    def operator_sy2(self, src, dst):
+        E1 = (src + dst) / 2
+        E2 = (src - dst).abs()
+        return torch.cat([E1, E2], dim=1)
+
+    def init(self):
+        self.embed = nn.Linear(self.feature_dim, self.num_class + 1)
+        self.trans = nn.Linear((self.num_class + 1)*2, self.num_class + 1)
+        self.f = nn.Softmax(dim=1)
+
+    def predict_edges(self, src, dst):
+        # 1
+        embed = self.embed(self.G['features'])
+        for layer in range(1, self.recursion+1):
+            src_embed, dst_embed = embed[src], embed[dst]
+            E = self.trans(self.operator(src_embed, dst_embed))
+            if layer != self.recursion:
+                embed = self.forward_withEdge(E)['poss_node']
+        return self.f(E)
 
 
 

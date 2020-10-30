@@ -38,7 +38,7 @@ _unconnected_files = join(world.DATA, 'UNCONNECTED')
 
 def update(name, path):
     global _all_datasets
-    _all_datasets[name] = path
+    _all_datasets[name] = path  
 def all_datasets():
     return list(_all_datasets)
 
@@ -49,8 +49,8 @@ def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
     except:
         raise KeyError(f"Please update your dataset {name}")
 
-    if name in ['citeseer', 'cora', 'pubmed']:
-        A, F, L =  load_ind(name)
+    if name in ['cite', 'cora', 'pubm']:
+        A, F, L, test_num =  load_ind(name)
         L = np.argmax(L, axis=-1)
     else:
         graphs = open(join(_all_datasets[name], 'out1_graph_edges.txt'), 'r')
@@ -60,31 +60,38 @@ def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
     if True:
         F = preprocess_features(F)
 
-    if name in ['cora', 'citeseer']:
+    if name in ['cora', 'cite']:
         connected_subset = process_unconnected(name, L)
 
-    if splitFile:
-        try:
-            assert splitFile.startswith(name)
-        except AssertionError:
-            raise AssertionError(f"Wrong split file, expect {splitFile} starts with {name}")
-        with np.load(join(_splits_files, splitFile)) as splits_file:
-            train_mask = splits_file['train_mask']
-            valid_mask = splits_file['val_mask']
-            test__mask = splits_file['test_mask']
+    if world.SEMI and name in ['cora', 'cite', 'pubm']:
+        (train_mask, 
+         valid_mask,
+         test__mask) = generate_mask_semi(F.shape[0],
+                                          len(np.unique(L)),
+                                          test_num)
     else:
-        try:
-            assert (trainP + valP + testP) == 1
-        except AssertionError:
-            raise AssertionError(f"Expect separation {trainP}+{valP}+{testP}=1")
-        if name in ['cora', 'citeseer']:
-            (train_mask,
-             valid_mask,
-             test__mask) = generate_mask(F.shape[0], trainP, valP, testP, subset=connected_subset)
+        if splitFile:
+            try:
+                assert splitFile.startswith(name)
+            except AssertionError:
+                raise AssertionError(f"Wrong split file, expect {splitFile} starts with {name}")
+            with np.load(join(_splits_files, splitFile)) as splits_file:
+                train_mask = splits_file['train_mask']
+                valid_mask = splits_file['val_mask']
+                test__mask = splits_file['test_mask']
         else:
-            (train_mask,
-             valid_mask,
-             test__mask) = generate_mask(F.shape[0], trainP, valP, testP)
+            try:
+                assert (trainP + valP + testP) == 1
+            except AssertionError:
+                raise AssertionError(f"Expect separation {trainP}+{valP}+{testP}=1")
+            if name in ['cora', 'cite']:
+                (train_mask,
+                valid_mask,
+                test__mask) = generate_mask(F.shape[0], trainP, valP, testP, subset=connected_subset)
+            else:
+                (train_mask,
+                valid_mask,
+                test__mask) = generate_mask(F.shape[0], trainP, valP, testP)
     return Graph({
         "name": name,
         "labels": torch.LongTensor(L),
@@ -139,9 +146,10 @@ class Graph:
             self.__dict['valid mask'].sum().item(),
             self.__dict['test mask'].sum().item(),
         )
-        assert all((self.__dict['train mask'] + self.__dict['valid mask'] + self.__dict['test mask']) < 2)
+        if not world.SEMI:
+            assert all((self.__dict['train mask'] + self.__dict['valid mask'] + self.__dict['test mask']) < 2)
         flag = f"""
-        {self.__dict['name']}({str(self.device)}):
+        {self.__dict['name']}({str(self.device)}) - {"SEMI" if world.SEMI else "FULL"}:
             Adj matrix     -> {self.__dict['adj matrix'].shape}
             Feature matrix -> {self.__dict['features'].shape}
             Label          -> {np.unique(self.__dict['labels'].cpu().numpy())}
@@ -256,7 +264,7 @@ def load_ind(name):
     x, y, tx, ty, allx, ally, graph = tuple(objects)
     test_idx_reorder = parse_index_file(f"{_all_datasets[name]}/ind.{name}.test.index")
     test_idx_range = np.sort(test_idx_reorder)
-    if name == 'citeseer':
+    if name == 'cite':
         # Fix citeseer dataset (there are some isolated nodes in the graph)
         # Find isolated nodes, add them as zero-vecs into the right position
         test_idx_range_full = range(min(test_idx_reorder),max(test_idx_reorder) + 1)
@@ -271,7 +279,8 @@ def load_ind(name):
     features[test_idx_reorder, :] = features[test_idx_range, :]
     labels = np.vstack((ally, ty))
     labels[test_idx_reorder, :] = labels[test_idx_range, :]
-    return nx.adjacency_matrix(nx.from_dict_of_lists(graph)), features, labels
+    test_num = len(ty)
+    return nx.adjacency_matrix(nx.from_dict_of_lists(graph)), features, labels, test_num
 
 def load_edges(handle):
     """
@@ -384,6 +393,21 @@ def generate_mask(length, trainP, valP, testP, subset=None):
     # print("SEE", train_mask.sum(), valid_mask.sum(), test__mask.sum())
     return train_mask, valid_mask, test__mask
 
+
+def generate_mask_semi(length, label_num, test_num):
+    '''
+        only for cite, cora, pubm datasets, following the setting of 
+        Yang et al. Revisiting Semi-Supervised Learning with Graph Embeddings
+    '''
+    total_labeled = 20*label_num
+    train_mask = np.zeros(length, dtype=np.int16)
+    valid_mask = np.zeros(length, dtype=np.int16)
+    test__mask = np.zeros(length, dtype=np.int16)
+    train_mask[:total_labeled] = 1
+    valid_mask[-test_num:] = 1
+    test__mask[-test_num:] = 1
+
+    return train_mask, valid_mask,test__mask
 
 def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     """Convert a scipy sparse matrix to a torch sparse tensor."""

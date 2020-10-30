@@ -83,8 +83,8 @@ class EdgeLoss(BasicLoss):
         if 'semi' in self.select:
             intrust = probability['poss_edge'][:, -1].detach()
             if self.semi_lambda >= 1e-9:
-                semi_loss = torch.sum((1 - intrust) * \
-                    (torch.sum((probability['poss_node'][edges[:, 0]] -
+                semi_loss = (1/2)*torch.sum( \
+                    (torch.sum((probability['poss_node'][edges[:, 0]] - \
                     probability['poss_node'][edges[:, 1]]).pow(2), dim=1)))
                 semi_loss *= self.semi_lambda
             else:

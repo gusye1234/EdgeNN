@@ -287,6 +287,13 @@ class EarlyStop:
             # torch.save(self.model.state_dict(), self.filename)
             return False
 
+def table_info(stop_at, seed):
+    from world import CONFIG
+    info = f'''
+    seed: {seed}, lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, semi: {CONFIG['semi_lambda']}, edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{stop_at}/{CONFIG['epoch']}
+    '''
+    return info
+
 
 if __name__ == "__main__":
     from data import all_datasets

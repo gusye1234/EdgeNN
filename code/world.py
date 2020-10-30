@@ -27,6 +27,7 @@ def parse_args():
     parser.add_argument('--dropout_rate', type=float, default=0.5)
     parser.add_argument('--edge_lambda', type=float, default=0.0001)
     parser.add_argument('--semi_lambda', type=float, default=0.)
+    parser.add_argument('--seed', type=int, default=2020)
     args = parser.parse_args()
     return args
 
@@ -34,7 +35,8 @@ def parse_args():
 ROOT = "/Users/gus/Desktop/edges"
 CODE = join(ROOT, "code")
 DATA = join(ROOT, "data")
-LOG = join(ROOT, "log")
+LOG  = join(ROOT, "log")
+SEMI = True
 
 GPU = torch.cuda.is_available()
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,7 +44,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 CONFIG = {**vars(parse_args())}
 CONFIG['the number of embed dims'] = CONFIG['dim']
 CONFIG['comment'] = CONFIG['comment'] + '-' + CONFIG['model']
-
+SEED = CONFIG['seed']
 
 NODE = NewType("NODE", int)
 # assert nodes' index start from 0, for all dataset
