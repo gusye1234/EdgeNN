@@ -38,12 +38,12 @@ _unconnected_files = join(world.DATA, 'UNCONNECTED')
 
 def update(name, path):
     global _all_datasets
-    _all_datasets[name] = path  
+    _all_datasets[name] = path
 def all_datasets():
     return list(_all_datasets)
 
 # A: adj matrix, F: features, L: labels, G: nx or dgl graph
-def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
+def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
     try:
         path = _all_datasets[name]
     except:
@@ -64,7 +64,7 @@ def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
         connected_subset = process_unconnected(name, L)
 
     if world.SEMI and name in ['cora', 'cite', 'pubm']:
-        (train_mask, 
+        (train_mask,
          valid_mask,
          test__mask) = generate_mask_semi(F.shape[0],
                                           len(np.unique(L)),
@@ -81,9 +81,10 @@ def loadAFL(name, splitFile=None, trainP=0.6, valP=0.2, testP=0.2):
                 test__mask = splits_file['test_mask']
         else:
             try:
-                assert (trainP + valP + testP) == 1
+                assert sum(split) == 1
             except AssertionError:
                 raise AssertionError(f"Expect separation {trainP}+{valP}+{testP}=1")
+            trainP, valP, testP = split
             if name in ['cora', 'cite']:
                 (train_mask,
                 valid_mask,
@@ -141,11 +142,8 @@ class Graph:
         return self
 
     def __repr__(self):
-        splits = (
-            self.__dict['train mask'].sum().item(),
-            self.__dict['valid mask'].sum().item(),
-            self.__dict['test mask'].sum().item(),
-        )
+        length = len(self.__dict['train mask'])
+        splits = f"{self.__dict['train mask'].sum().item()/length:.2f}," + f"{self.__dict['valid mask'].sum().item()/length:.2f}," + f"{self.__dict['test mask'].sum().item()/length:.2f}"
         if not world.SEMI:
             assert all((self.__dict['train mask'] + self.__dict['valid mask'] + self.__dict['test mask']) < 2)
         flag = f"""
@@ -153,7 +151,7 @@ class Graph:
             Adj matrix     -> {self.__dict['adj matrix'].shape}
             Feature matrix -> {self.__dict['features'].shape}
             Label          -> {np.unique(self.__dict['labels'].cpu().numpy())}
-            Spilt          -> {splits} = {sum(splits)}
+            Spilt          -> {splits} = {length}
             EDGE:
                 Train      -> {self.count_edges(self.__dict['train mask'])}
                 Valid      -> {self.count_edges(self.__dict['valid mask'])}

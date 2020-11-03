@@ -4,22 +4,23 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from world import join, CONFIG
-from utils import timer, Path3, set_seed
+from utils import timer, Path3, set_seed, table_info
 from data import loadAFL
 from loss import CrossEntropy, EdgeLoss
 from tabulate import tabulate
 from tensorboardX import SummaryWriter
 
-set_seed(2020)
+seed = world.SEED
+set_seed(seed)
 #################################
 # data
 #################################
-dataset = loadAFL(CONFIG['dataset'])
-                #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_2.npz")
+dataset = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
+#   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_2.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
-CONFIG['comment'] = 'original-GCN'
+# CONFIG['comment'] = 'original-GCN'
 unique_name = utils.uniqueFileFlag()
 
 from model import GCN, GCN_single
@@ -65,6 +66,7 @@ for epoch in range(1, CONFIG['epoch']+1):
             val_loss = F.nll_loss(val_logp[dataset['valid mask']], labels[dataset['valid mask']]).item()
             val_pred = val_logp.argmax(dim=1)
             val_acc = torch.eq(val_pred[dataset['valid mask']], labels[dataset['valid mask']]).float().mean().item()
+            tes_acc = torch.eq(val_pred[dataset['test mask']],labels[dataset['test mask']]).float().mean().item()
 
         report = {
             'train loss': train_loss.item(),
@@ -76,11 +78,12 @@ for epoch in range(1, CONFIG['epoch']+1):
         f" T loss {report['train loss']:.3f}#"
         f" T acc {report['train acc']:.2f}#"
         f" V loss {report['valid loss']:.3f}#"
-        f" V acc {report['valid acc']:.2f}", end='')
+        f" V acc {report['valid acc']:.2f}",
+        f" E acc {tes_acc}",end='')
     learning_rate_scheduler.step(val_loss)
     if earlystop.step(epoch, report, 'valid acc'):
         break
-    print()
+    print("\r", end='') if CONFIG['quite'] else print()
 
 torch.save(earlystop.best_model, earlystop.filename)
 final_report = earlystop.best_result
@@ -91,9 +94,12 @@ with torch.no_grad():
     test_loss = F.nll_loss(test_logp[dataset['test mask']], labels[dataset['test mask']]).item()
     test_pred = test_logp.argmax(dim=1)
     test_acc = torch.eq(test_pred[dataset['test mask']], labels[dataset['test mask']]).float().mean().item()
-    # test_hidden_features = net.gcn1(g, features).cpu().numpy()
-
-    # final_train_pred = test_pred[dataset['train mask']].cpu().numpy()
-    # final_val_pred = test_pred[dataset['valid mask']].cpu().numpy()
-    # final_test_pred = test_pred[dataset['test mask']].cpu().numpy()
-print(test_loss, test_acc)
+    final_report['test acc'] = test_acc
+    try:
+        handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
+        info = table_info(earlystop.best_epoch, seed)
+        handler.write(info)
+        handler.write(utils.dict2table(final_report, headers='firstrow'))
+        handler.write('\n')
+    finally:
+        handler.close()

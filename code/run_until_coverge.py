@@ -15,7 +15,7 @@ set_seed(seed)
 #################################
 # data
 #################################
-dataset = loadAFL(CONFIG['dataset'])
+dataset = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
 #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
@@ -27,8 +27,10 @@ unique_name = utils.uniqueFileFlag()
 #################################
 
 if CONFIG['model'] == 'embedding':
-    from model import EmbeddingP, EmbeddingP_multiLayer
-    # MODEL = EmbeddingP(CONFIG, dataset)
+    from model import EmbeddingP
+    MODEL = EmbeddingP(CONFIG, dataset)
+elif CONFIG['model'] == 'multi_embedding':
+    from model import EmbeddingP_multiLayer
     MODEL = EmbeddingP_multiLayer(CONFIG, dataset)
 elif CONFIG['model'] == 'gcn':
     from model import GCNP
@@ -98,13 +100,13 @@ for epoch in range(1, CONFIG['epoch'] + 1):
 
             # remove unaligned dim
             with timer(name='M'):
-                unlabeled = (~dataset['train mask'])
-                values, args = torch.topk(torch.max(probability['poss_node'][unlabeled][:, :-1], dim=1)[0], 10)
+                # unlabeled = (~dataset['train mask'])
+                # values, args = torch.topk(torch.max(probability['poss_node'][unlabeled][:, :-1], dim=1)[0], 10)
+                # print(values)
+                # print(prediction[unlabeled][args])
+                # print(dataset['labels'][unlabeled][args])
                 prediction = probability['poss_node'][:, :-1].argmax(dim=1)
                 prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
-                print(values)
-                print(prediction[unlabeled][args])
-                print(dataset['labels'][unlabeled][args])
                 # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
                                                      dataset['labels'],
@@ -140,7 +142,7 @@ for epoch in range(1, CONFIG['epoch'] + 1):
     scheduler.step(report['valid loss'])
     if earlystop.step(epoch, report, 'valid acc'):
         break
-    print()
+    print("\r", end='') if CONFIG['quite'] else print()
 
 #################################
 # Test

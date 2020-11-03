@@ -290,8 +290,10 @@ class EarlyStop:
 def table_info(stop_at, seed):
     from world import CONFIG
     info = f'''
-    seed: {seed}, lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, semi: {CONFIG['semi_lambda']}, edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{stop_at}/{CONFIG['epoch']}
-    '''
+#################################################
+seed: {seed}, lr:{CONFIG['lr']}, decay:{CONFIG['decay']}, semi: {CONFIG['semi_lambda']}, 
+edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{stop_at}/{CONFIG['epoch']}
+splits: {CONFIG['split']}\n'''
     return info
 
 

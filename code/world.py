@@ -28,6 +28,9 @@ def parse_args():
     parser.add_argument('--edge_lambda', type=float, default=0.0001)
     parser.add_argument('--semi_lambda', type=float, default=0.)
     parser.add_argument('--seed', type=int, default=2020)
+    parser.add_argument('--split', type=str, default='[0.6, 0.2, 0.2]')
+    parser.add_argument('--semi_split', type=int, default=0)
+    parser.add_argument('--quite', type=int, default=0)
     args = parser.parse_args()
     return args
 
@@ -36,7 +39,6 @@ ROOT = "/Users/gus/Desktop/edges"
 CODE = join(ROOT, "code")
 DATA = join(ROOT, "data")
 LOG  = join(ROOT, "log")
-SEMI = True
 
 GPU = torch.cuda.is_available()
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -44,7 +46,9 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 CONFIG = {**vars(parse_args())}
 CONFIG['the number of embed dims'] = CONFIG['dim']
 CONFIG['comment'] = CONFIG['comment'] + '-' + CONFIG['model']
+CONFIG['split'] = eval(CONFIG['split'])
 SEED = CONFIG['seed']
+SEMI = CONFIG['semi_split']
 
 NODE = NewType("NODE", int)
 # assert nodes' index start from 0, for all dataset

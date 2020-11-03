@@ -49,7 +49,7 @@ class EdgeLoss(BasicLoss):
             loss += F.nll_loss(log_likelihood, groundTruth_mask.long())
         #
         edges, weights = self.G.edges_tensor()
-        
+
         # ==========================================================
         # peak = 1000
         # peak_candi = np.random.randint(len(edges), size=(peak, ))
@@ -124,19 +124,21 @@ class EdgeLoss(BasicLoss):
             edge_loss /= torch.sum(label_mask)
             loss += edge_loss
             # The above code is equal to below:
-            # edge_loss1 = 0.
-            # for i, edge in enumerate(edges):
-            #     if mask[edge[0]] or mask[edge[1]]:
-            #         if mask[edge[0]] and mask[edge[1]]:
-            #             if groundTruth[edge[0]] == groundTruth[edge[1]]:
-            #                 edge_loss1 += -torch.log(poss_edge[i][groundTruth[edge[0]]])
-            #             else:
-            #                 edge_loss1 += -torch.log(poss_edge[i][-1])
-            #         else:
-            #             labeled = edge[0] if mask[edge[0]] else edge[1]
-            #             edge_loss1 += -torch.log(poss_edge[i][-1] +
-            #                                     poss_edge[i][groundTruth[labeled]])
-            # edge_loss1 *= self.edge_lambda
-            # edge_loss1 /= torch.sum(label_mask)
+            '''
+            edge_loss1 = 0.
+            for i, edge in enumerate(edges):
+                if mask[edge[0]] or mask[edge[1]]:
+                    if mask[edge[0]] and mask[edge[1]]:
+                        if groundTruth[edge[0]] == groundTruth[edge[1]]:
+                            edge_loss1 += -torch.log(poss_edge[i][groundTruth[edge[0]]])
+                        else:
+                            edge_loss1 += -torch.log(poss_edge[i][-1])
+                    else:
+                        labeled = edge[0] if mask[edge[0]] else edge[1]
+                        edge_loss1 += -torch.log(poss_edge[i][-1] +
+                                                poss_edge[i][groundTruth[labeled]])
+            edge_loss1 *= self.edge_lambda
+            edge_loss1 /= torch.sum(label_mask)
+            '''
             # print(edge_loss1.item(), edge_loss.item())
         return loss
