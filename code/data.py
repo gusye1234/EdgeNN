@@ -116,7 +116,9 @@ class Graph:
         self.__revelant_sets = None
         self.__class = np.unique(data_dict['labels'])
         self.__index_A = self.__dict['adj matrix'].tocsr()
+        # index_A is fast for row operations
         self.__edges_A =  self.__dict['adj matrix'].todok()
+        # edges_A is stored in (Pair, value) format
         self.adj = sparse_mx_to_torch_sparse_tensor(
             preprocess_adj(self.__dict['adj matrix']))
         self.sum = torch.FloatTensor(self.__index_A.sum(1))

@@ -5,17 +5,21 @@ import torch.nn.functional as F
 import numpy as np
 from world import join, CONFIG
 from utils import timer, Path3, set_seed, table_info
-from data import loadAFL
+from data import loadAFL, Graph
 from loss import CrossEntropy, EdgeLoss
 from tabulate import tabulate
 from tensorboardX import SummaryWriter
 
 seed = world.SEED
 set_seed(seed)
+
+top_k=10
 #################################
 # data
 #################################
-dataset = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
+
+'''A:adj, F: feature, L:label'''
+dataset : Graph = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
 #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
@@ -46,7 +50,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     factor=CONFIG['decay_factor'],
     patience=CONFIG['decay_patience'])
 # LOSS = CrossEntropy()
-LOSS_edge = EdgeLoss(graph=dataset, select=['edge'],**CONFIG)
+LOSS_edge = EdgeLoss(graph=dataset, select=['edge'], **CONFIG)
 LOSS_task = EdgeLoss(graph=dataset, select=['task', 'semi'], **CONFIG)
 
 #################################
@@ -71,7 +75,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
         with timer(name='FL'):
             MODEL.train()
             probability = MODEL()
-            loss_edge = LOSS_edge(probability, dataset['labels'], dataset['train mask'])
+            loss_edge = LOSS_edge(probability, dataset['labels'],
+                                  dataset['train mask'])
         with timer(name='B'):
             optim.zero_grad()
             loss_edge.backward()
@@ -80,7 +85,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
         with timer(name='FL'):
             MODEL.train()
             probability = MODEL()
-            loss = LOSS_task(probability, dataset['labels'],dataset['train mask'])
+            loss = LOSS_task(probability, dataset['labels'],
+                             dataset['train mask'])
         with timer(name='B'):
             optim.zero_grad()
             loss.backward()
@@ -95,8 +101,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
             # print(probability['poss_node'][:5])
             with timer(name='L'):
                 report['valid loss'] = LOSS_task(probability_valid,
-                                            dataset['labels'],
-                                            dataset['valid mask']).item()
+                                                 dataset['labels'],
+                                                 dataset['valid mask']).item()
 
             # remove unaligned dim
             with timer(name='M'):
@@ -106,7 +112,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
                 # print(prediction[unlabeled][args])
                 # print(dataset['labels'][unlabeled][args])
                 prediction = probability['poss_node'][:, :-1].argmax(dim=1)
-                prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
+                prediction_valid = probability_valid[
+                    'poss_node'][:, :-1].argmax(dim=1)
                 # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
                                                      dataset['labels'],
@@ -115,8 +122,8 @@ for epoch in range(1, CONFIG['epoch'] + 1):
                                                      dataset['labels'],
                                                      dataset['valid mask'])
                 report['test acc'] = utils.accuracy(prediction_valid,
-                                                     dataset['labels'],
-                                                     dataset['test mask'])
+                                                    dataset['labels'],
+                                                    dataset['test mask'])
 
     print(
         # f"[{epoch:4}/{CONFIG['epoch']}] : {timer.dict()}"
@@ -156,9 +163,44 @@ with torch.no_grad():
     final_report['test acc'] = utils.accuracy(prediction, dataset['labels'],
                                               dataset['test mask'])
     final_report['test loss'] = LOSS_task(probability, dataset['labels'],
-                                     dataset['test mask']).item()
-torch.save(earlystop.best_model, earlystop.filename)
+                                          dataset['test mask']).item()
+    Overall = {
+        "prediction": prediction.cpu().numpy(),
+        "recall": probability['recall_node'].cpu().numpy(),
+        "precision": probability['poss_node'].cpu().numpy()
+    }
 
+torch.save(earlystop.best_model, earlystop.filename)
+#################################
+# Rank
+#################################
+import rich
+print()
+rank_table = utils.Group_ByPrediction(Overall, dataset, sortby='recall')
+
+# recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
+recall_all = {'recall':[], 'precision':[], 'f1':[]}
+precision_all = {'recall': [], 'precision': [], 'f1': []}
+ndcg_all = {'recall': [], 'precision': [], 'f1': []}
+
+for method in ['recall', 'precision', 'f1']:
+    rich.print(f"[bold yellow]{method}[/bold yellow]")
+    rank_table = utils.Group_ByPrediction(Overall, dataset, sortby=method)
+    recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
+    rich.print("[bold green]   Recall[/bold green]")
+    print(utils.dict2table(recall, headers='firstrow'))
+    rich.print("[bold green]   Precion[/bold green]")
+    print(utils.dict2table(precision, headers='firstrow'))
+    rich.print("[bold green]   NDCG[/bold green]")
+    print(utils.dict2table(NDCG, headers='firstrow'))
+    for label in range(len(NDCG)):
+        recall_all[method].append(recall[label])
+        precision_all[method].append(precision[label])
+        ndcg_all[method].append(NDCG[label])
+from pprint import pprint
+print(recall_all)
+print(precision_all)
+print(ndcg_all)
 #################################
 # Log
 #################################

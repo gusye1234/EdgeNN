@@ -85,6 +85,9 @@ for epoch in range(1, CONFIG['epoch']+1):
         break
     print("\r", end='') if CONFIG['quite'] else print()
 
+#################################
+# Test
+#################################
 torch.save(earlystop.best_model, earlystop.filename)
 final_report = earlystop.best_result
 net.load_state_dict(earlystop.best_model)
@@ -95,11 +98,14 @@ with torch.no_grad():
     test_pred = test_logp.argmax(dim=1)
     test_acc = torch.eq(test_pred[dataset['test mask']], labels[dataset['test mask']]).float().mean().item()
     final_report['test acc'] = test_acc
-    try:
-        handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
-        info = table_info(earlystop.best_epoch, seed)
-        handler.write(info)
-        handler.write(utils.dict2table(final_report, headers='firstrow'))
-        handler.write('\n')
-    finally:
-        handler.close()
+#################################
+# Log
+#################################
+try:
+    handler = open(Path3(world.LOG, 'results', f"{unique_name}.txt"), 'a')
+    info = table_info(earlystop.best_epoch, seed)
+    handler.write(info)
+    handler.write(utils.dict2table(final_report, headers='firstrow'))
+    handler.write('\n')
+finally:
+    handler.close()

@@ -27,8 +27,11 @@ class BasicModel(Module):
         value = poss_edge * weights.unsqueeze(1)
         index = edges[:, 0].repeat(dims, 1).t()
         poss_node.scatter_add_(0, index, value)
-        poss_node /= self.G.neighbours_sum()
-        return {'poss_node': poss_node, 'poss_edge': poss_edge}
+        recall_node = poss_node
+        poss_node = poss_node/self.G.neighbours_sum()
+        return {'poss_node': poss_node,
+                'poss_edge': poss_edge,
+                'recall_node': recall_node}
 
     def forward(self):
         'predict all the label'

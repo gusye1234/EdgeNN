@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import dok_matrix, csr_matrix
 from tabulate import tabulate
+from data import Graph
 
 #################################
 # metrics
@@ -68,14 +69,14 @@ def dict2table(table : dict, headers='row'):
         tab = []
         for key in sorted(list(table)):
             tab.append([key, table[key]])
-        return tabulate(tab)
+        return tabulate(tab, floatfmt=".4f")
     elif headers == 'firstrow':
         head = []
         data = []
         for key in sorted(list(table)):
             head.append(key)
             data.append(table[key])
-        return tabulate([head, data], headers='firstrow')
+        return tabulate([head, data], headers='firstrow', floatfmt=".4f")
 
 
 def state_edges_distribution(data_dict):
@@ -296,6 +297,129 @@ edge: {CONFIG['edge_lambda']}, factor:{CONFIG['decay_factor']}, stop:{stop_at}/{
 splits: {CONFIG['split']}\n'''
     return info
 
+
+def get_Flag(prediction, groundtruth, k):
+    """compute NDCG for one seq
+
+    Args:
+        prediction (ndarray): shape (node_num, ) (sorted)
+        groundtruth (ndarray): shape (test_num, )
+        k (int): top-K
+    
+    Returns:
+        dict: 
+            key: rate: A 0-1 mask with shape (k, ), 
+                       indicate if the topk elements 
+                       in prediction are in groundtruth
+            key: truth: The groundtruth
+    """
+    flag = {}
+    seq_need = prediction[:k]
+    flag["rate"] = np.asanyarray(list(map(lambda x: x in groundtruth, seq_need)),
+                                 dtype='float')
+    flag["truth"] = groundtruth
+    return flag
+
+
+def Recall_Precision_AtK(flag, k):
+    """compute recall, precision for one seq
+
+    Args:
+        flag (dict) 
+        k (int): top-K
+    """
+    R = flag["rate"][:k]
+    precision = R.sum()/k
+    recall = R.sum()/len(flag['truth'])
+    return {"precision":precision, "recall":recall}
+
+def NDCG_AtK(flag, k):
+    """compute recall, precision for one seq
+
+    Args:
+        flag (dict)
+        k (int): top-K
+    """
+    k = len(flag["rate"]) if k >= len(flag["rate"]) else k
+    R = flag["rate"][:k]
+    num_data = len(flag['truth'])
+    assert num_data > 0
+    Max_len = num_data if k >= num_data else k
+    ideal_R = np.zeros((k, ))
+    ideal_R[:Max_len] = 1.
+    idcg = np.sum(ideal_R * 1./np.log2(np.arange(2, k+2)))
+    dcg = np.sum(R * 1. / np.log2(np.arange(2, k + 2)))
+    return dcg/idcg
+
+def HR_AtK(flag, k):
+    """Abandon
+    compute recall, precision for one seq
+
+    Args:
+        flag (dict) 
+        k (int): top-K
+    """
+    pass
+
+
+def Group_ByPrediction(Overall, dataset: Graph, sortby='recall'):
+    """helper function to evaluate rank
+
+    Args:
+        Overall (dict): check run_topk.py
+        dataste (Graph):
+        sortby (str, optional): how to sort prediction. Defaults to 'recall'.
+
+    Returns:
+        dict: key: label, value: (sorted prediction, groundtruth)
+    """
+    labels = dataset['labels'].cpu().numpy()
+    table = {}
+    classes = np.unique(labels)
+    # print(classes)
+    # print(Overall['recall'].shape, Overall['precision'].shape)
+    for label in classes:
+        pred_where =  np.where(Overall['prediction'] == label)[0]
+        truth_where = np.where(labels == label)[0]
+
+
+        recall  = Overall['recall'][pred_where, label]
+        precision = Overall['precision'][pred_where, label]
+        if sortby == 'recall':
+            index = np.argsort(recall)
+        elif sortby == 'precision':
+            index = np.argsort(precision)
+        elif sortby == 'f1':
+            f1 = (2*recall*precision/(recall + precision))
+            index = np.argsort(f1)
+        print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
+        sorted_pred = pred_where[index]
+        table[label] = (sorted_pred, truth_where)
+    return table
+
+def topk_metrics(rank_table, top_k):
+    rate_table = {
+        label: get_Flag(pred, truth, top_k)
+        for label, (pred, truth) in rank_table.items()
+    }
+    recall_precision = {
+        label: Recall_Precision_AtK(flag, top_k)
+        for label, flag in rate_table.items()
+    }
+    # --------------------------------------------
+    recall = {
+        label: R_P['recall']
+        for label, R_P in recall_precision.items()
+    }
+    precision = {
+        label: R_P['precision']
+        for label, R_P in recall_precision.items()
+    }
+    NDCG = {
+        label: NDCG_AtK(flag, top_k)
+        for label, flag in rate_table.items()
+    }
+    return recall, precision, NDCG
 
 if __name__ == "__main__":
     from data import all_datasets
