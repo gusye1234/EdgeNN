@@ -12,11 +12,13 @@ from tensorboardX import SummaryWriter
 
 seed = world.SEED
 set_seed(seed)
+
 #################################
 # data
 #################################
 dataset = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
 #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
+print(dataset)
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
@@ -59,7 +61,6 @@ earlystop = utils.EarlyStop(
     Path3(world.LOG, 'checkpoints', f"{unique_name}.pth.tar"))
 
 (MODEL, dataset) = utils.TO(MODEL, dataset, device=world.DEVICE)
-print(dataset)
 print(utils.dict2table(CONFIG))
 
 #################################

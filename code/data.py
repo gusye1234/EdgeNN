@@ -3,9 +3,9 @@ load data and convert format.
 General way to store a graph is scipy.sparse
 """
 import world
-from world import GRAPH
 import torch
 import sys
+import os
 import pickle as pkl
 import numpy as np
 import networkx as nx
@@ -13,6 +13,7 @@ from os.path import join
 import scipy as sp
 import scipy.sparse as spp
 from sklearn.model_selection import ShuffleSplit
+import rich
 
 
 #################################
@@ -42,6 +43,12 @@ def update(name, path):
 def all_datasets():
     return list(_all_datasets)
 
+def mask_name(name, split):
+    split = [str(i) for i in split]
+    split = "-".join(split)
+    mask = f"{name}-{world.SEED}-{split}.npz"
+    return mask
+
 # A: adj matrix, F: features, L: labels, G: nx or dgl graph
 def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
     try:
@@ -63,22 +70,29 @@ def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
     if name in ['cora', 'cite']:
         connected_subset = process_unconnected(name, L)
 
-    if world.SEMI and name in ['cora', 'cite', 'pubm']:
+    if world.SEMI and (name in ['cora', 'cite', 'pubm']):
         (train_mask,
-         valid_mask,
-         test__mask) = generate_mask_semi(F.shape[0],
-                                          len(np.unique(L)),
-                                          test_num)
+        valid_mask,
+        test__mask) = generate_mask_semi(F.shape[0],
+                                        len(np.unique(L)),
+                                        test_num)
     else:
-        if splitFile:
-            try:
-                assert splitFile.startswith(name)
-            except AssertionError:
-                raise AssertionError(f"Wrong split file, expect {splitFile} starts with {name}")
-            with np.load(join(_splits_files, splitFile)) as splits_file:
-                train_mask = splits_file['train_mask']
-                valid_mask = splits_file['val_mask']
-                test__mask = splits_file['test_mask']
+        if os.path.exists(join(path, mask_name(name, split))):
+            npz_name = mask_name(name, split)
+            mask = np.load(join(path, npz_name))
+            train_mask = mask['train_mask']
+            valid_mask = mask['valid_mask']
+            test__mask = mask['test_mask']
+            rich.print(f"[bold yellow]Load Spliting from {npz_name}[/bold yellow]")
+        # if splitFile:
+        #     try:
+        #         assert splitFile.startswith(name)
+        #     except AssertionError:
+        #         raise AssertionError(f"Wrong split file, expect {splitFile} starts with {name}")
+        #     with np.load(join(_splits_files, splitFile)) as splits_file:
+        #         train_mask = splits_file['train_mask']
+        #         valid_mask = splits_file['val_mask']
+        #         test__mask = splits_file['test_mask']
         else:
             try:
                 assert sum(split) == 1
@@ -93,6 +107,10 @@ def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
                 (train_mask,
                 valid_mask,
                 test__mask) = generate_mask(F.shape[0], trainP, valP, testP)
+            mask = join(path, mask_name(name, split))
+            np.savez(mask, train_mask=train_mask,
+                     valid_mask=valid_mask, test_mask=test__mask)
+            print(f"Save splits to {mask}")
     return Graph({
         "name": name,
         "labels": torch.LongTensor(L),
@@ -126,7 +144,7 @@ class Graph:
         Edges = torch.Tensor([(pair[0], pair[1], weights) for pair, weights in self.edges()])
         self.tensor_edges = Edges[:, :2].long()
         self.tensor_weights = Edges[:, 2]
-
+        
     def num_nodes(self):
         return len(self.__dict['labels'])
 
@@ -145,6 +163,7 @@ class Graph:
 
     def __repr__(self):
         length = len(self.__dict['train mask'])
+        edge_length = len(list(self.edges()))
         splits = f"{self.__dict['train mask'].sum().item()/length:.2f}," + f"{self.__dict['valid mask'].sum().item()/length:.2f}," + f"{self.__dict['test mask'].sum().item()/length:.2f}"
         if not world.SEMI:
             assert all((self.__dict['train mask'] + self.__dict['valid mask'] + self.__dict['test mask']) < 2)
@@ -155,6 +174,7 @@ class Graph:
             Label          -> {np.unique(self.__dict['labels'].cpu().numpy())}
             Spilt          -> {splits} = {length}
             EDGE:
+                Label ratio-> {(self.count_edges(self.__dict['train mask'])[0]+self.count_edges(self.__dict['train mask'])[1])/edge_length:.2f}
                 Train      -> {self.count_edges(self.__dict['train mask'])}
                 Valid      -> {self.count_edges(self.__dict['valid mask'])}
                 Test       -> {self.count_edges(self.__dict['test mask'])}
@@ -198,53 +218,46 @@ class Graph:
     def edges_tensor(self):
         return self.tensor_edges, self.tensor_weights
 
-    # def update_predict(self, labels):
-    #     """using newly predicted labels"""
-    #     self.__pre_label = labels
-    #     self.__upd_label = True
-
-    # def _Revelant_sets(self):
-    #     """
-    #     Calculate all the revelant sets, if there are new comming labels
-    #     """
-    #     if not self.__upd_label:
-    #         if self.__revelant_sets is None:
-    #             raise ValueError("labels haven't been updated")
-    #         else:
-    #             return
-    #     del self.__revelant_sets
-    #     self.__revelant_sets = {'unaligned' : []}
-    #     self.__upd_label = False
-    #     for pair, _ in self.__edges_A.items():
-    #         src = pair[0]
-    #         dst = pair[1]
-    #         if self.__pre_label[src] == self.__pre_label[dst]:
-    #             label = self.__pre_label[src]
-    #             self.__revelant_sets[label] = self.__revelant_sets.get(label, [])
-    #             self.__revelant_sets[label].append(pair)
-    #         else:
-    #             self.__revelant_sets['unaligned'].append(pair)
-
-    # def C_(self, label):
-    #     """
-    #     retrieve all the edges in C_{label}
-    #     """
-    #     self._Revelant_sets()
-    #     assert label == 'unaligned' or label in self.__class
-    #     return self.__revelant_sets[label]
-
-    # def intersection(self, node, label):
-    #     """
-    #     Return edges, Connect to node and in the C_{label}
-    #     """
-    #     assert self.__pre_label is not None
-    #     label_u = self.__pre_label[node]
-    #     if label_u != label:
-    #         return []
-    #     neigh = self.neighbours(node)
-    #     index = (self.__pre_label[neigh] == label)
-    #     for vk in neigh[index]:
-    #         yield (node, vk)
+    def splitByEdge(self, ratio:float):
+        EDGES = list(self.edges())
+        total_edges = len(EDGES)
+        wanted_edges = int(total_edges*ratio)
+        train_mask = np.zeros_like(self.__dict["train mask"], dtype=np.bool)
+        valid_mask = np.zeros_like(self.__dict["valid mask"], dtype=np.bool)
+        test_mask = np.zeros_like(self.__dict["test mask"], dtype=np.bool)
+        edge_order = np.arange(total_edges)
+        np.random.shuffle(edge_order)
+        already_edge = set()
+        for index in edge_order:
+            if len(already_edge) >= wanted_edges:
+                break
+            node1, node2 = EDGES[index][0]
+            labeled_num = np.sum(train_mask[[node1, node2]])
+            train_mask[node1] = 1
+            labled_neighbours1 = self.neighbours(node1)[train_mask[self.neighbours(node1)]]
+            for neighbours1 in labled_neighbours1:
+                already_edge.add((int(node1), int(neighbours1)))
+                already_edge.add((int(neighbours1), int(node1)))
+            train_mask[node2] = 1
+            labled_neighbours2 = self.neighbours(node2)[train_mask[self.neighbours(node2)]]
+            for neighbours2 in labled_neighbours2:
+                already_edge.add((int(node2), int(neighbours2)))
+                already_edge.add((int(neighbours2), int(node2)))
+            already_edge.add((int(node1), int(node2)))
+            already_edge.add((int(node2), int(node1)))
+            # exit()
+        print(f"split {total_edges} of {len(already_edge)} ~ {wanted_edges}")
+        unlabeled = np.where(train_mask == 0)[0]
+        valid_size = len(unlabeled)//2
+        # test_size = len(unlabeled) - valid_size
+        # split valid set and test set in half, half
+        where = np.random.choice(np.arange(len(unlabeled)), size=(valid_size,), replace=False)
+        valid_where = unlabeled[where]
+        valid_mask[valid_where] = 1
+        test_mask = (1 - train_mask) - valid_mask
+        self.__dict['train mask'] = torch.ByteTensor(train_mask)
+        self.__dict['valid mask'] = torch.ByteTensor(valid_mask)
+        self.__dict['test mask'] = torch.ByteTensor(test_mask)
 
 
 #################################
@@ -365,14 +378,14 @@ def generate_mask(length, trainP, valP, testP, subset=None):
         val mask   : np.ndarray    
         test mask  : np.ndarray
     """
-    train_mask = np.zeros(length, dtype=np.int16)
-    valid_mask = np.zeros(length, dtype=np.int16)
-    test__mask = np.zeros(length, dtype=np.int16)
+    train_mask = np.zeros(length, dtype=np.bool)
+    valid_mask = np.zeros(length, dtype=np.bool)
+    test__mask = np.zeros(length, dtype=np.bool)
     if subset is not None:
         length_= length
         length = len(subset)
 
-    fake_mask = np.zeros(length, dtype=np.int16)
+    fake_mask = np.zeros(length, dtype=np.bool)
 
     TV      = (trainP + valP)
     split_1 = ShuffleSplit(n_splits=1, train_size=TV)
@@ -400,9 +413,9 @@ def generate_mask_semi(length, label_num, test_num):
         Yang et al. Revisiting Semi-Supervised Learning with Graph Embeddings
     '''
     total_labeled = 20*label_num
-    train_mask = np.zeros(length, dtype=np.int16)
-    valid_mask = np.zeros(length, dtype=np.int16)
-    test__mask = np.zeros(length, dtype=np.int16)
+    train_mask = np.zeros(length, dtype=np.bool)
+    valid_mask = np.zeros(length, dtype=np.bool)
+    test__mask = np.zeros(length, dtype=np.bool)
     train_mask[:total_labeled] = 1
     valid_mask[-test_num:] = 1
     test__mask[-test_num:] = 1

@@ -43,6 +43,7 @@ class EdgeLoss(BasicLoss):
 
         if 'task' in self.select:
             probability_node = probability['poss_node'][mask]
+
             groundTruth_mask = groundTruth[mask]
             # print(groundTruth_mask[:20])
             log_likelihood = torch.log(probability_node)
@@ -85,7 +86,8 @@ class EdgeLoss(BasicLoss):
             if self.semi_lambda >= 1e-9:
                 semi_loss = (1/2)*torch.sum( \
                     (torch.sum((probability['poss_node'][edges[:, 0]] - \
-                    probability['poss_node'][edges[:, 1]]).pow(2), dim=1)))
+                    probability['poss_node'][edges[:, 1]]).pow(2), dim=1))
+            )
                 semi_loss *= self.semi_lambda
             else:
                 semi_loss = 0
@@ -108,18 +110,33 @@ class EdgeLoss(BasicLoss):
             edge_loss += -torch.sum(torch.log(
                 poss_edge[both_label][same_label][range_index, groundTruth[edges[both_label][same_label][:,0]]]
             ))
-            edge_loss += -torch.sum(torch.log(
-                poss_edge[both_label][diff_label][:, -1]
-            ))
-            range_index_left = torch.arange(left_single.sum())
-            range_index_right = torch.arange(right_single.sum())
-            edge_loss += -(torch.sum(torch.log(
-                poss_edge[single_label][left_single][:, -1] + \
-                    poss_edge[single_label][left_single][range_index_left, groundTruth[edges[single_label][left_single][:,0]]]
-            )) + torch.sum(torch.log(
-                poss_edge[single_label][right_single][:, -1] + \
-                    poss_edge[single_label][right_single][range_index_right, groundTruth[edges[single_label][right_single][:,1]]]
-            )))
+            # edge_loss += -torch.sum(torch.log(
+            #     poss_edge[both_label][diff_label][:, -1]
+            # ))
+            range_index = torch.arange(diff_label.sum())
+            edge_loss += -torch.sum(
+                1/2*torch.log(poss_edge[both_label][diff_label][range_index, groundTruth[edges[both_label][diff_label][:,0]]]) +\
+                    1/2*torch.log(poss_edge[both_label][diff_label][range_index, groundTruth[edges[both_label][diff_label][:,1]]])
+            )
+            
+            # range_index_left = torch.arange(left_single.sum())
+            # range_index_right = torch.arange(right_single.sum())
+            # edge_loss += -(torch.sum(torch.log(
+            #     poss_edge[single_label][left_single][:, -1] + \
+            #         poss_edge[single_label][left_single][range_index_left, groundTruth[edges[single_label][left_single][:,0]]]
+            # )) + torch.sum(torch.log(
+            #     poss_edge[single_label][right_single][:, -1] + \
+            #         poss_edge[single_label][right_single][range_index_right, groundTruth[edges[single_label][right_single][:,1]]]
+            # )))
+            # range_index_left = torch.arange(left_single.sum())
+            # range_index_right = torch.arange(right_single.sum())
+            # edge_loss += -(1/2*torch.sum(torch.log(
+            #     poss_edge[single_label][left_single][range_index_left, groundTruth[edges[single_label][left_single][:,0]]]
+            # )) + 1/2*torch.sum(torch.log(
+            #     poss_edge[single_label][right_single][range_index_right, groundTruth[edges[single_label][right_single][:,1]]]
+            # )))
+
+
             edge_loss *= self.edge_lambda
             edge_loss /= torch.sum(label_mask)
             loss += edge_loss
@@ -140,5 +157,5 @@ class EdgeLoss(BasicLoss):
             edge_loss1 *= self.edge_lambda
             edge_loss1 /= torch.sum(label_mask)
             '''
-            # print(edge_loss1.item(), edge_loss.item())
+            # print(loss.item(), edge_loss.item())
         return loss

@@ -31,6 +31,8 @@ def parse_args():
     parser.add_argument('--split', type=str, default='[0.6, 0.2, 0.2]')
     parser.add_argument('--semi_split', type=int, default=0)
     parser.add_argument('--quite', type=int, default=0)
+    parser.add_argument('--topk', type=int, default=25)
+    parser.add_argument('--pertrain', type=int, default=1)
     args = parser.parse_args()
     return args
 
@@ -48,6 +50,8 @@ CONFIG['the number of embed dims'] = CONFIG['dim']
 CONFIG['comment'] = CONFIG['comment'] + '-' + CONFIG['model']
 CONFIG['split'] = eval(CONFIG['split'])
 SEED = CONFIG['seed']
+TOPK = CONFIG['topk']
+PERTRAIN = CONFIG['pertrain']
 SEMI = CONFIG['semi_split']
 
 NODE = NewType("NODE", int)

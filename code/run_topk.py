@@ -13,7 +13,7 @@ from tensorboardX import SummaryWriter
 seed = world.SEED
 set_seed(seed)
 
-top_k=10
+top_k=world.TOPK
 #################################
 # data
 #################################
@@ -21,6 +21,9 @@ top_k=10
 '''A:adj, F: feature, L:label'''
 dataset : Graph = loadAFL(CONFIG['dataset'], split=CONFIG['split'])
 #   splitFile=f"{world.CONFIG['dataset']}_split_0.6_0.2_1.npz")
+# dataset.splitByEdge(0.45)
+print(dataset)
+
 CONFIG['the number of nodes'] = dataset.num_nodes()
 CONFIG['the number of classes'] = dataset.num_classes()
 CONFIG['the dimension of features'] = dataset['features'].shape[1]
@@ -63,7 +66,6 @@ earlystop = utils.EarlyStop(
     Path3(world.LOG, 'checkpoints', f"{unique_name}.pth.tar"))
 
 (MODEL, dataset) = utils.TO(MODEL, dataset, device=world.DEVICE)
-print(dataset)
 print(utils.dict2table(CONFIG))
 
 #################################
@@ -82,15 +84,16 @@ for epoch in range(1, CONFIG['epoch'] + 1):
             loss_edge.backward()
             optim.step()
             report['edge_loss'] = loss_edge.item()
-        with timer(name='FL'):
-            MODEL.train()
-            probability = MODEL()
-            loss = LOSS_task(probability, dataset['labels'],
-                             dataset['train mask'])
-        with timer(name='B'):
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+        for i in range(world.PERTRAIN):
+            with timer(name='FL'):
+                MODEL.train()
+                probability = MODEL()
+                loss = LOSS_task(probability, dataset['labels'],
+                                dataset['train mask'])
+            with timer(name='B'):
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
         # print(loss_edge.item(), loss.item())
         with torch.no_grad():
             MODEL.eval()
@@ -176,7 +179,11 @@ torch.save(earlystop.best_model, earlystop.filename)
 #################################
 import rich
 print()
-rank_table = utils.Group_ByPrediction(Overall, dataset, sortby='recall')
+# rank_table = utils.Group_ByPrediction(Overall, dataset, sortby='recall')
+train_mask = dataset['train mask'].cpu()
+test_mask = dataset['test mask'].cpu()
+test_total = float(torch.sum(test_mask).item())
+print("total test: ", test_total)
 
 # recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
 recall_all = {'recall':[], 'precision':[], 'f1':[]}
@@ -185,19 +192,31 @@ ndcg_all = {'recall': [], 'precision': [], 'f1': []}
 
 for method in ['recall', 'precision', 'f1']:
     rich.print(f"[bold yellow]{method}[/bold yellow]")
-    rank_table = utils.Group_ByPrediction(Overall, dataset, sortby=method)
+    rank_table, test_labels = utils.Group_ByPrediction_mask(Overall,
+                                                            dataset,
+                                                            sortby=method,
+                                                            train_mask=train_mask,
+                                                            test_mask=test_mask)
     recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
-    rich.print("[bold green]   Recall[/bold green]")
-    print(utils.dict2table(recall, headers='firstrow'))
-    rich.print("[bold green]   Precion[/bold green]")
-    print(utils.dict2table(precision, headers='firstrow'))
-    rich.print("[bold green]   NDCG[/bold green]")
-    print(utils.dict2table(NDCG, headers='firstrow'))
+    rich.print("[bold green]   topk STAT[/bold green]")
+
+    pred_dict = {
+        "recall":
+        np.sum([value * test_labels[index]
+                for index, value in recall.items()]) / test_total,
+        "precision":
+        np.sum(
+            [value * test_labels[index]
+             for index, value in precision.items()]) / test_total,
+        "NDCG":
+        np.sum([value * test_labels[index]
+                for index, value in NDCG.items()]) / test_total
+    }
+    print(utils.dict2table(pred_dict, headers='firstrow'))
     for label in range(len(NDCG)):
         recall_all[method].append(recall[label])
         precision_all[method].append(precision[label])
         ndcg_all[method].append(NDCG[label])
-from pprint import pprint
 print(recall_all)
 print(precision_all)
 print(ndcg_all)

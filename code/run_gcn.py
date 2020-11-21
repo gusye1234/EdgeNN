@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 
 seed = world.SEED
 set_seed(seed)
+top_k = world.TOPK
 #################################
 # data
 #################################
@@ -94,10 +95,68 @@ net.load_state_dict(earlystop.best_model)
 with torch.no_grad():
     test_logits = net(dataset['features'], dataset.adj)
     test_logp = F.log_softmax(test_logits, 1)
+    precision = F.softmax(test_logits, 1)
     test_loss = F.nll_loss(test_logp[dataset['test mask']], labels[dataset['test mask']]).item()
     test_pred = test_logp.argmax(dim=1)
     test_acc = torch.eq(test_pred[dataset['test mask']], labels[dataset['test mask']]).float().mean().item()
     final_report['test acc'] = test_acc
+
+
+#################################
+# Rank
+#################################
+# Overall = {
+#     "prediction": test_pred.cpu().numpy(),
+#     "precision": precision.cpu().numpy()
+# }
+# import rich
+# print()
+# train_mask = dataset['train mask'].cpu().numpy()
+# test_mask = dataset['test mask'].cpu().numpy()
+# rank_table = utils.Group_ByPrediction(Overall, dataset, sortby='precision')
+
+# for method in ['precision']:
+#     rich.print(f"[bold yellow]{method}[/bold yellow]")
+#     rank_table = utils.Group_ByPrediction(Overall, dataset, sortby=method)
+#     recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
+#     rich.print("[bold green]   topk STAT[/bold green]")
+#     pred_dict = {
+#         "recall" : np.mean([value for _, value in recall.items()]),
+#         "precision": np.mean([value for _, value in precision.items()]),
+#         "NDCG": np.mean([value for _, value in NDCG.items()]),
+#     }
+#     print(utils.dict2table(pred_dict, headers='firstrow'))
+Overall = {
+    "prediction": test_pred.cpu().numpy(),
+    "precision": precision.cpu().numpy()
+}
+import rich
+print()
+train_mask = dataset['train mask'].cpu()
+test_mask = dataset['test mask'].cpu()
+test_total = torch.sum(test_mask).item()
+
+for method in ['precision']:
+    rich.print(f"[bold yellow]{method}[/bold yellow]")
+    rank_table, test_labels = utils.Group_ByPrediction_mask(
+        Overall, dataset, sortby=method, train_mask=train_mask, test_mask=test_mask
+    )
+    recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
+    rich.print("[bold green]   topk STAT[/bold green]")
+
+    pred_dict = {
+        "recall":
+        np.sum([value * test_labels[index]
+                for index, value in recall.items()]) / test_total,
+        "precision":
+        np.sum(
+            [value * test_labels[index]
+             for index, value in precision.items()]) / test_total,
+        "NDCG":
+        np.sum([value * test_labels[index]
+                for index, value in NDCG.items()]) / test_total
+    }
+    print(utils.dict2table(pred_dict, headers='firstrow'))
 #################################
 # Log
 #################################

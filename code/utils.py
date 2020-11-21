@@ -340,6 +340,7 @@ def NDCG_AtK(flag, k):
         flag (dict)
         k (int): top-K
     """
+
     k = len(flag["rate"]) if k >= len(flag["rate"]) else k
     R = flag["rate"][:k]
     num_data = len(flag['truth'])
@@ -349,7 +350,8 @@ def NDCG_AtK(flag, k):
     ideal_R[:Max_len] = 1.
     idcg = np.sum(ideal_R * 1./np.log2(np.arange(2, k+2)))
     dcg = np.sum(R * 1. / np.log2(np.arange(2, k + 2)))
-    return dcg/idcg
+    ndcg = dcg / idcg if abs(idcg) > 1e-9 else 0
+    return ndcg
 
 def HR_AtK(flag, k):
     """Abandon
@@ -362,7 +364,7 @@ def HR_AtK(flag, k):
     pass
 
 
-def Group_ByPrediction(Overall, dataset: Graph, sortby='recall'):
+def Group_ByPrediction(Overall, dataset: Graph,mask = None,sortby='recall'):
     """helper function to evaluate rank
 
     Args:
@@ -382,20 +384,71 @@ def Group_ByPrediction(Overall, dataset: Graph, sortby='recall'):
         pred_where =  np.where(Overall['prediction'] == label)[0]
         truth_where = np.where(labels == label)[0]
 
-
-        recall  = Overall['recall'][pred_where, label]
-        precision = Overall['precision'][pred_where, label]
         if sortby == 'recall':
+            recall = Overall['recall'][pred_where, label]
             index = np.argsort(recall)
         elif sortby == 'precision':
+            precision = Overall['precision'][pred_where, label]
             index = np.argsort(precision)
         elif sortby == 'f1':
+            recall = Overall['recall'][pred_where, label]
+            recall_max = np.max(recall) if len(recall)>0 else 1
+            recall = recall/recall_max
+            precision = Overall['precision'][pred_where, label]
             f1 = (2*recall*precision/(recall + precision))
             index = np.argsort(f1)
-        print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
+        # print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
         sorted_pred = pred_where[index]
         table[label] = (sorted_pred, truth_where)
     return table
+
+def Group_ByPrediction_mask(Overall, dataset: Graph, train_mask = None,test_mask = None,sortby='recall'):
+    """helper function to evaluate rank
+
+    Args:
+        Overall (dict): check run_topk.py
+        dataste (Graph):
+        sortby (str, optional): how to sort prediction. Defaults to 'recall'.
+
+    Returns:
+        dict: key: label, value: (sorted prediction, groundtruth)
+    """
+    train_mask = train_mask.numpy().astype(np.bool)
+    labels = dataset['labels'][test_mask].cpu().numpy()
+    nodes_in_mask = torch.arange(len(test_mask))[test_mask].numpy()
+    table = {}
+    classes = np.unique(labels)
+    Overall = {
+        name: value[~train_mask] for name, value in Overall.items()
+    }
+    nodes_out_train = np.arange(len(test_mask))[~train_mask]
+    # print(classes)
+    # print(Overall['recall'].shape, Overall['precision'].shape)
+    test_labels = {}
+    for label in classes:
+        pred_where =  np.where(Overall['prediction'] == label)[0]
+        truth_where = np.where(labels == label)[0]
+        truth_where = nodes_in_mask[truth_where]
+
+        if sortby == 'recall':
+            recall = Overall['recall'][pred_where, label]
+            index = np.argsort(recall)
+        elif sortby == 'precision':
+            precision = Overall['precision'][pred_where, label]
+            index = np.argsort(precision)
+        elif sortby == 'f1':
+            recall = Overall['recall'][pred_where, label]
+            recall_max = np.max(recall) if len(recall)>0 else 1
+            recall = recall/recall_max
+            precision = Overall['precision'][pred_where, label]
+            f1 = (2*recall*precision/(recall + precision))
+            index = np.argsort(f1)
+        # print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
+        test_labels[label] = len(truth_where)
+        sorted_pred = pred_where[index]
+        sorted_pred = nodes_out_train[sorted_pred]
+        table[label] = (sorted_pred, truth_where)
+    return table, test_labels
 
 def topk_metrics(rank_table, top_k):
     rate_table = {
