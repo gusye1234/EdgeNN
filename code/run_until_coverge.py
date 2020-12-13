@@ -108,7 +108,6 @@ for epoch in range(1, CONFIG['epoch'] + 1):
                 # print(dataset['labels'][unlabeled][args])
                 prediction = probability['poss_node'][:, :-1].argmax(dim=1)
                 prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
-                # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
                                                      dataset['labels'],
                                                      dataset['train mask'])

@@ -12,7 +12,6 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='cora')
-    # TODO
     parser.add_argument('--dim', type=int, default=8)
     parser.add_argument('--lr', type=float, default=0.05)
     parser.add_argument('--decay', type=float, default=5e-2)

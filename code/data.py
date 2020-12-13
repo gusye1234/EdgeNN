@@ -50,7 +50,7 @@ def mask_name(name, split):
     return mask
 
 # A: adj matrix, F: features, L: labels, G: nx or dgl graph
-def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
+def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2], need_dgl=False):
     try:
         path = _all_datasets[name]
     except:
@@ -116,10 +116,10 @@ def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
         "labels": torch.LongTensor(L),
         "features": torch.Tensor(F),
         "adj matrix": A + spp.eye(A.shape[0]),
-        "test mask":torch.ByteTensor(test__mask),
-        "train mask": torch.ByteTensor(train_mask),
-        "valid mask": torch.ByteTensor(valid_mask),
-    })
+        "test mask":torch.BoolTensor(test__mask),
+        "train mask": torch.BoolTensor(train_mask),
+        "valid mask": torch.BoolTensor(valid_mask),
+    }, need_dgl=need_dgl)
 
 
 #################################
@@ -127,7 +127,8 @@ def loadAFL(name, splitFile=None, split=[0.6, 0.2, 0.2]):
 #################################
 class Graph:
     '''wrap data with set operations'''
-    def __init__(self, data_dict : dict):
+    def __init__(self, data_dict : dict, need_dgl=False):
+        self.device = 'cpu'
         self.__dict = data_dict
         self.__pre_label = None
         self.__upd_label  = False
@@ -135,21 +136,46 @@ class Graph:
         self.__class = np.unique(data_dict['labels'])
         self.__index_A = self.__dict['adj matrix'].tocsr()
         # index_A is fast for row operations
-        self.__edges_A =  self.__dict['adj matrix'].todok()
+        self.__edges_A = self.__dict['adj matrix'].todok()
         # edges_A is stored in (Pair, value) format
         self.adj = sparse_mx_to_torch_sparse_tensor(
             preprocess_adj(self.__dict['adj matrix']))
+
+        self.dgl_g = DGLGraph(self.__dict['adj matrix']) if need_dgl else None
+
         self.sum = torch.FloatTensor(self.__index_A.sum(1))
-        self.device = 'cpu'
         Edges = torch.Tensor([(pair[0], pair[1], weights) for pair, weights in self.edges()])
         self.tensor_edges = Edges[:, :2].long()
         self.tensor_weights = Edges[:, 2]
         
+        if need_dgl:
+            self.dgl_g = self._perpare_dgl()
+        else:
+            self.dgl_g = None
+
     def num_nodes(self):
         return len(self.__dict['labels'])
 
     def num_classes(self):
         return len(np.unique(self.__dict['labels']))
+
+    def _perpare_dgl(self):
+        from dgl import DGLGraph
+        import dgl.init as init
+        dgl_g = DGLGraph(self.__dict['adj matrix'])
+        deg = dgl_g.in_degrees().float()
+        norm = torch.pow(degs, -0.5)
+        norm[torch.isinf(norm)] = 0.
+        dgl_g.ndata['norm'] = norm.unsqueeze(1)
+        dgl_g.set_n_initializer(init.zero_initializer)
+        dgl_g.set_e_initializer(init.zero_initializer)
+        return dgl_g
+
+    def getCSR(self):
+        return self.__index_A
+
+    def getDOK(self):
+        return self.__edges_A
 
     def to(self, device):
         self.__dict['labels'] = self.__dict['labels'].to(device)
@@ -158,6 +184,8 @@ class Graph:
         self.tensor_edges = self.tensor_edges.to(device)
         self.tensor_weights = self.tensor_weights.to(device)
         self.sum = self.sum.to(device)
+        if self.dgl_g is not None:
+            self.dgl_g.to(device)
         self.device = device
         return self
 
@@ -323,7 +351,7 @@ def load_feature_label(handle, convert=None):
         labels.append(int(line[2]))
         feature = np.asanyarray([int(k) for k in line[1].split(',')], dtype=np.int32)
         if convert:
-            temp = np.zeros(convert, dtype=np.uint8)
+            temp = np.zeros(convert, dtype=np.bool)
             temp[feature] = 1
             feature = temp
         features.append(feature)

@@ -273,43 +273,79 @@ class GCNP(BasicModel):
         return self.trans(E)
 
 
-class GCNP_aligned(Module):
-    def __init__(self, CONFIG, G):
-        super(GCNP_aligned, self).__init__()
-        self.G = G
-        self.num_nodes = CONFIG['the number of nodes']
-        self.num_dims = CONFIG['the number of embed dims']
-        self.num_class = CONFIG['the number of classes']
-        self.num_features = CONFIG['the dimension of features']
-        hidden_dim = CONFIG['gcn_hidden']
-        dropout = CONFIG['dropout_rate']
-        self.gcn = GCN(self.num_features, hidden_dim, self.num_dims, dropout)
-        self.trans = nn.Sequential(nn.Linear(self.num_dims * 2, 16), nn.ReLU(),
-                                   nn.Linear(16, self.num_class ),
-                                   nn.ReLU(), nn.Softmax(dim=1))
+class GATSingleAttentionHead(nn.Module):
+    def __init__(self, in_feats, out_feats, activation, dropout_prob):
+        super(GATSingleAttentionHead, self).__init__()
+        self.in_feats_dropout = nn.Dropout(dropout_prob)
+        self.linear = nn.Linear(in_feats, out_feats, bias=False)
+        nn.init.xavier_uniform_(self.linear.weight)
+        self.attention_linear = nn.Linear(2 * out_feats, 1, bias=False)
+        nn.init.xavier_uniform_(self.attention_linear.weight)
+        self.attention_head_dropout = nn.Dropout(dropout_prob)
+        self.linear_feats_dropout = nn.Dropout(dropout_prob)
+        self.bias = nn.Parameter(
+            th.ones(1, out_feats, dtype=th.float32, requires_grad=True))
+        nn.init.xavier_uniform_(self.bias.data)
+        self.activation = activation
 
-    def operator(self, src, dst):
-        E1 = (src + dst) / 2
-        E2 = (src - dst).pow(2)
-        return torch.cat([E1, E2], dim=1)
+    def calculate_node_pairwise_attention(self, edges):
+        h_concat = th.cat([edges.src['Wh'], edges.dst['Wh']], dim=1)
+        e = self.attention_linear(h_concat)
+        e = F.leaky_relu(e, negative_slope=0.2)
+        return {'e': e}
 
-    def predict_edges(self, src, dst):
-        embedding = self.gcn(self.G['features'], self.G.adj)
-        src_embed = embedding[src]
-        dst_embed = embedding[dst]
-        E = self.operator(src_embed, dst_embed)
-        # print(E[:5])
-        return self.trans(E)
+    def message_func(self, edges):
+        return {'Wh': edges.src['Wh'], 'e': edges.data['e']}
 
-    def forward(self):
-        'predict all the label'
-        edges, weights = self.G.edges_tensor()
-        poss_edge = self.predict_edges(edges[:, 0], edges[:, 1])
-        poss_node = torch.zeros(self.num_nodes,
-                                self.num_class).to(world.DEVICE)
+    def reduce_func(self, nodes):
+        a = F.softmax(nodes.mailbox['e'], dim=1)
+        a_dropout = self.attention_head_dropout(a)
+        Wh_dropout = self.linear_feats_dropout(nodes.mailbox['Wh'])
+        return {'h_new': th.sum(a_dropout * Wh_dropout, dim=1)}
 
-        value = poss_edge * weights.unsqueeze(1)
-        index = edges[:, 0].repeat(self.num_class, 1).t()
-        poss_node.scatter_add_(0, index, value)
-        poss_node /= self.G.neighbours_sum()
-        return {'poss_node': poss_node, 'poss_edge': poss_edge}
+    def forward(self, g, feature):
+        Wh = self.in_feats_dropout(feature)
+        Wh = self.linear(Wh)
+        g.ndata['Wh'] = Wh
+        g.apply_edges(self.calculate_node_pairwise_attention)
+        g.update_all(self.message_func, self.reduce_func)
+        h_new = g.ndata.pop('h_new')
+        h_new = self.activation(h_new + self.bias)
+        return h_new
+
+
+# Adapted from https://docs.dgl.ai/tutorials/models/1_gnn/9_gat.html
+class GAT(nn.Module):
+    def __init__(self, in_feats, out_feats, activation, num_heads,
+                 dropout_prob, merge):
+        super(GAT, self).__init__()
+        self.attention_heads = nn.ModuleList()
+        for _ in range(num_heads):
+            self.attention_heads.append(
+                GATSingleAttentionHead(in_feats, out_feats, activation,
+                                       dropout_prob))
+        self.merge = merge
+
+    def forward(self, g, feature):
+        all_attention_head_outputs = [
+            head(g, feature) for head in self.attention_heads
+        ]
+        if self.merge == 'cat':
+            return th.cat(all_attention_head_outputs, dim=1)
+        else:
+            return th.mean(th.stack(all_attention_head_outputs), dim=0)
+
+
+class GATNet(nn.Module):
+    def __init__(self, num_input_features, num_output_classes, num_hidden,
+                 num_heads_layer_one, num_heads_layer_two, dropout_rate):
+        super(GATNet, self).__init__()
+        self.gat1 = GAT(num_input_features, num_hidden, F.elu,
+                        num_heads_layer_one, dropout_rate, 'cat')
+        self.gat2 = GAT(num_hidden * num_heads_layer_one, num_output_classes,
+                        lambda x: x, num_heads_layer_two, dropout_rate, 'mean')
+
+    def forward(self, g, features):
+        x = self.gat1(g, features)
+        x = self.gat2(g, x)
+        return x

@@ -103,7 +103,7 @@ class EdgeLoss(BasicLoss):
             same_label = (groundTruth[edges[both_label][:, 0]] == groundTruth[edges[both_label][:, 1]])
             diff_label = ~same_label
 
-            single_label = label_mask - both_label
+            single_label = label_mask ^ both_label
             left_single = mask[edges[single_label][:, 0]]
             right_single = mask[edges[single_label][:, 1]]
             range_index = torch.arange(same_label.sum())

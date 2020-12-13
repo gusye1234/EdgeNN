@@ -71,7 +71,6 @@ for epoch in range(1, CONFIG['epoch']+1):
             MODEL.train()
             probability = MODEL()
             print(torch.std(probability['poss_node'].data, dim=0))
-        # TODO: Loss function?
         with timer(name='L'):
             loss = LOSS(probability, dataset['labels'], dataset['train mask'])
         with timer(name='B'):
@@ -95,7 +94,6 @@ for epoch in range(1, CONFIG['epoch']+1):
             with timer(name='M'):
                 prediction = probability['poss_node'][:, :-1].argmax(dim=1)
                 prediction_valid = probability_valid['poss_node'][:, :-1].argmax(dim=1)
-                # TODO: Loss function?
                 report['train acc'] = utils.accuracy(prediction,
                                                     dataset['labels'],
                                                     dataset['train mask'])
