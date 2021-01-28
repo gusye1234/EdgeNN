@@ -184,6 +184,10 @@ with torch.no_grad():
         "precision": probability['poss_node'].cpu().numpy()
     }
 pprint(final_report)
+np.savetxt("edge_cora.txt", Overall['precision'])
+
+pprint(utils.peak(dataset, Overall['precision']))
+pprint(utils.peak(dataset, Overall['recall']))
 #################################
 # Rank
 #################################
@@ -206,8 +210,7 @@ for method in ['recall', 'precision', 'f1']:
                                                             dataset,
                                                             sortby=method,
                                                             train_mask=train_mask,
-                                                            test_mask=test_mask,
-                                                            plot=(method == 'precision'))
+                                                            test_mask=test_mask,)
     recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
     rich.print("[bold green]   topk STAT[/bold green]")
 
@@ -228,9 +231,9 @@ for method in ['recall', 'precision', 'f1']:
         recall_all[method].append(recall[label])
         precision_all[method].append(precision[label])
         ndcg_all[method].append(NDCG[label])
-print(recall_all)
-print(precision_all)
-print(ndcg_all)
+# print(recall_all)
+# print(precision_all)
+# print(ndcg_all)
 #################################
 # Log
 #################################

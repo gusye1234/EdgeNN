@@ -363,60 +363,6 @@ def HR_AtK(flag, k):
     """
     pass
 
-
-def Group_ByPrediction_mask(Overall, dataset: Graph, train_mask = None,test_mask = None,sortby='recall', plot=False):
-    """helper function to evaluate rank
-
-    Args:
-        Overall (dict): check run_topk.py
-        dataste (Graph):
-        sortby (str, optional): how to sort prediction. Defaults to 'recall'.
-
-    Returns:
-        dict: key: label, value: (sorted prediction, groundtruth)
-    """
-    train_mask = train_mask.numpy().astype(np.bool)
-    labels = dataset['labels'][test_mask].cpu().numpy()
-    nodes_in_mask = torch.arange(len(test_mask))[test_mask].numpy()
-    table = {}
-    classes = np.unique(labels)
-    Overall = {
-        name: value[~train_mask] for name, value in Overall.items()
-    }
-    nodes_out_train = np.arange(len(test_mask))[~train_mask]
-    # print(classes)
-    # print(Overall['recall'].shape, Overall['precision'].shape)
-    test_labels = {}
-    logs = []
-    for label in classes:
-        pred_where = np.where(Overall['prediction'] == label)[0]
-        truth_where = np.where(labels == label)[0]
-        truth_where = nodes_in_mask[truth_where]
-        if plot:
-            logs.append(Overall[sortby][pred_where, label])
-        if sortby == 'recall':
-            recall = Overall['recall'][pred_where, label]
-            index = np.argsort(recall)[::-1]
-        elif sortby == 'precision':
-            precision = Overall['precision'][pred_where, label]
-            index = np.argsort(precision)[::-1]
-        elif sortby == 'f1':
-            recall = Overall['recall'][pred_where, label]
-            recall_max = np.max(recall) if len(recall)>0 else 1
-            recall = recall/recall_max
-            precision = Overall['precision'][pred_where, label]
-            f1 = (2*recall*precision/(recall + precision))
-            index = np.argsort(f1)[::-1]
-        # print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
-        test_labels[label] = len(truth_where)
-        sorted_pred = pred_where[index]
-        sorted_pred = nodes_out_train[sorted_pred]
-        table[label] = (sorted_pred, truth_where)
-    if plot:
-        plot_curve(logs, classes)
-    return table, test_labels
-
-
 def Group_ByPrediction_mask_all(Overall,
                                 dataset: Graph,
                                 train_mask=None,
@@ -436,10 +382,14 @@ def Group_ByPrediction_mask_all(Overall,
     train_mask = train_mask.numpy().astype(np.bool)
     labels = dataset['labels'][test_mask].cpu().numpy()
     nodes_in_mask = torch.arange(len(test_mask))[test_mask].numpy()
+    # labels = dataset['labels'][~train_mask].cpu().numpy()
+    # nodes_in_mask = torch.arange(len(test_mask))[~train_mask].numpy()
     table = {}
     classes = np.unique(labels)
-    Overall = {name: value[~train_mask] for name, value in Overall.items()}
-    nodes_out_train = np.arange(len(test_mask))[~train_mask]
+    # Overall = {name: value[~train_mask] for name, value in Overall.items()}
+    Overall = {name: value[test_mask] for name, value in Overall.items()}
+    # nodes_out_train = np.arange(len(test_mask))[~train_mask]
+    nodes_out_train = np.arange(len(test_mask))[test_mask]
     test_labels = {}
     logs = []
     for label in classes:
@@ -469,6 +419,35 @@ def Group_ByPrediction_mask_all(Overall,
         plot_curve(logs, classes)
     return table, test_labels
 
+def peak(dataset: Graph, score, topk=world.TOPK):
+    train_mask = dataset['train mask'].numpy()
+    score[train_mask] = 0
+    # matrix = dataset.generate_co()
+    # matrix = dataset.generate_recall()
+    matrix = dataset.generate_precision()
+    table = {}
+    for label in range(len(np.unique(dataset['labels']))):
+        truth = (dataset['labels'] == label).numpy()
+        index = np.argsort(score[:, label])[::-1]
+        truth = truth[index]
+        table[label] = (
+            np.sum(matrix[index[:topk], label][truth[:topk]] > 0.95) /
+            np.sum(truth[:topk]), np.sum(truth[:topk]))
+
+    return table
+
+def count_inside(dataset : Graph, threshold=0.95):
+    # mask = dataset['test mask'].numpy()
+    labels = dataset['labels'].numpy()
+    # matrix = dataset.generate_co()
+    # matrix = dataset.generate_recall()
+    matrix = dataset.generate_precision()
+    count = np.zeros((len(np.unique(labels)), ))
+    for node in range(len(labels)):
+        label = labels[node]
+        if matrix[node, label] >= threshold:
+            count[label] += 1
+    return count
 
 def topk_metrics(rank_table, top_k):
     rate_table = {
@@ -522,3 +501,57 @@ if __name__ == "__main__":
     for dataset in all_datasets():
         print(loadAFL(dataset))
         # vis_ConfusedMatrix(loadAFL(dataset))
+
+
+
+# def Group_ByPrediction_mask(Overall, dataset: Graph, train_mask = None,test_mask = None,sortby='recall', plot=False):
+#     """helper function to evaluate rank
+
+#     Args:
+#         Overall (dict): check run_topk.py
+#         dataste (Graph):
+#         sortby (str, optional): how to sort prediction. Defaults to 'recall'.
+
+#     Returns:
+#         dict: key: label, value: (sorted prediction, groundtruth)
+#     """
+#     train_mask = train_mask.numpy().astype(np.bool)
+#     labels = dataset['labels'][test_mask].cpu().numpy()
+#     nodes_in_mask = torch.arange(len(test_mask))[test_mask].numpy()
+#     table = {}
+#     classes = np.unique(labels)
+#     Overall = {
+#         name: value[~train_mask] for name, value in Overall.items()
+#     }
+#     nodes_out_train = np.arange(len(test_mask))[~train_mask]
+#     # print(classes)
+#     # print(Overall['recall'].shape, Overall['precision'].shape)
+#     test_labels = {}
+#     logs = []
+#     for label in classes:
+#         pred_where = np.where(Overall['prediction'] == label)[0]
+#         truth_where = np.where(labels == label)[0]
+#         truth_where = nodes_in_mask[truth_where]
+#         if plot:
+#             logs.append(Overall[sortby][pred_where, label])
+#         if sortby == 'recall':
+#             recall = Overall['recall'][pred_where, label]
+#             index = np.argsort(recall)[::-1]
+#         elif sortby == 'precision':
+#             precision = Overall['precision'][pred_where, label]
+#             index = np.argsort(precision)[::-1]
+#         elif sortby == 'f1':
+#             recall = Overall['recall'][pred_where, label]
+#             recall_max = np.max(recall) if len(recall)>0 else 1
+#             recall = recall/recall_max
+#             precision = Overall['precision'][pred_where, label]
+#             f1 = (2*recall*precision/(recall + precision))
+#             index = np.argsort(f1)[::-1]
+#         # print(label, len(pred_where), len(truth_where),np.std(dataset.neighbours_sum().cpu().numpy()[truth_where]))
+#         test_labels[label] = len(truth_where)
+#         sorted_pred = pred_where[index]
+#         sorted_pred = nodes_out_train[sorted_pred]
+#         table[label] = (sorted_pred, truth_where)
+#     if plot:
+#         plot_curve(logs, classes)
+#     return table, test_labels

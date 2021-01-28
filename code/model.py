@@ -231,6 +231,24 @@ class GCN(nn.Module):
         return x
 
 
+class GCN_mean(nn.Module):
+    def __init__(self, G : Graph, nfeat, nhid, nclass, dropout):
+        super(GCN_mean, self).__init__()
+        self.G = G
+        self.gc1 = GraphConvolution(nfeat, nhid)
+        self.gc2 = GraphConvolution(nhid, nclass)
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        x = F.relu(self.gc1(x, adj))
+        x = x/self.G.neighbours_sum()
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.gc2(x, adj)
+        x = x/self.G.neighbours_sum()
+        # return F.log_softmax(x, dim=1)
+        return x
+
+
 class GCN_single(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
         super(GCN_single, self).__init__()

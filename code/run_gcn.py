@@ -122,6 +122,11 @@ Overall = {
     "prediction": test_pred.cpu().numpy(),
     "precision": precision.cpu().numpy()
 }
+np.savetxt("gcn_cora.txt", Overall['precision'])
+
+pprint(utils.peak(dataset, Overall['precision']))
+
+
 import rich
 print()
 train_mask = dataset['train mask'].cpu()
@@ -131,12 +136,12 @@ test_total = torch.sum(test_mask).item()
 for method in ['precision']:
     rich.print(f"[bold yellow]{method}[/bold yellow]")
     rank_table, test_labels = utils.Group_ByPrediction_mask_all(
-        Overall, dataset, sortby=method, train_mask=train_mask, test_mask=test_mask, plot=True
+        Overall, dataset, sortby=method, train_mask=train_mask, test_mask=test_mask
     )
     recall, precision, NDCG = utils.topk_metrics(rank_table, top_k)
-    pprint(recall)
-    pprint(precision)
-    pprint(NDCG)
+    # pprint(recall)
+    # pprint(precision)
+    # pprint(NDCG)
     rich.print("[bold green]   topk STAT[/bold green]")
 
     pred_dict = {

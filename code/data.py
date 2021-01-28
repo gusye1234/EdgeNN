@@ -190,7 +190,7 @@ class Graph:
         return self
 
     def __repr__(self):
-        length = len(self.__dict['train mask'])
+        length = len(self.__dict['train mask'].numpy())
         edge_length = len(list(self.edges()))
         splits = f"{self.__dict['train mask'].sum().item()/length:.2f}," + f"{self.__dict['valid mask'].sum().item()/length:.2f}," + f"{self.__dict['test mask'].sum().item()/length:.2f}"
         if not world.SEMI:
@@ -287,6 +287,64 @@ class Graph:
         self.__dict['valid mask'] = torch.ByteTensor(valid_mask)
         self.__dict['test mask'] = torch.ByteTensor(test_mask)
 
+    def generate_co(self):
+        dataset = self
+        label = dataset['labels'].numpy()
+        total = len(np.unique(label))
+        matrix = np.zeros((len(label), total))
+        for node in range(len(label)):
+            l_self = label[node]
+            neigbor = dataset.neighbours(node)
+            l_nei = label[neigbor]
+            my_nei = np.zeros((total, ))
+            for nei in l_nei:
+                my_nei[nei] += 1
+            total_nei = len(neigbor)
+            matrix[node] = my_nei/total_nei
+        return matrix
+    
+    def generate_precision(self):
+        dataset = self
+        label = dataset['labels'].numpy()
+        total = len(np.unique(label))
+        matrix = np.zeros((len(label), total+1))
+
+        for node in range(len(label)):
+            l_self = label[node]
+            neigbor = dataset.neighbours(node)
+            l_nei = label[neigbor]
+            my_nei = np.zeros((total + 1, ))
+            for nei in l_nei:
+                if nei == l_self:
+                    my_nei[l_self] += 1
+                else:
+                    my_nei[-1] += 1
+            total_nei = len(neigbor)
+            matrix[node] = my_nei/total_nei
+        return matrix
+    
+    def generate_recall(self):
+        dataset = self
+        label = dataset['labels'].numpy()
+        total = len(np.unique(label))
+        total_inside = np.zeros((total, ))
+        matrix = np.zeros((len(label), total+1))
+
+        for node in range(len(label)):
+            l_self = label[node]
+            neigbor = dataset.neighbours(node)
+            l_nei = label[neigbor]
+            my_nei = np.zeros((total + 1, ))
+            for nei in l_nei:
+                if nei == l_nei:
+                    my_nei[l_nei] += 1
+                else:
+                    my_nei[-1] += 1
+            total_inside[l_self] += np.sum(l_nei == l_self)
+            matrix[node] = my_nei
+        matrix = matrix/total_inside
+        matrix = matrix/matrix.max(0)
+        return matrix
 
 #################################
 # data helper

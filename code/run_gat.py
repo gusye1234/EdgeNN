@@ -155,7 +155,7 @@ test_total = torch.sum(test_mask).item()
 
 for method in ['precision']:
     rich.print(f"[bold yellow]{method}[/bold yellow]")
-    rank_table, test_labels = utils.Group_ByPrediction_mask(
+    rank_table, test_labels = utils.Group_ByPrediction_mask_all(
         Overall,
         dataset,
         sortby=method,
